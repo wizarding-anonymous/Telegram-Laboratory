@@ -1,0 +1,3 @@
+# services\auth_service\requirements.txt
+# Общий requirements.txt, который указывает на конкретные файлы
+-r requirements/base.txt

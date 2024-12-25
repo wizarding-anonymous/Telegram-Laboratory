@@ -1,0 +1,5 @@
+# services\bot_constructor_service\requirements\prod.txt
+-r base.txt
+
+prometheus-client
+gunicorn

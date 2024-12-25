@@ -1,0 +1,11 @@
+# services\bot_constructor_service\requirements\base.txt
+fastapi
+uvicorn[standard]
+sqlalchemy
+asyncpg
+pydantic
+redis
+httpx
+loguru
+python-decouple
+pyjwt

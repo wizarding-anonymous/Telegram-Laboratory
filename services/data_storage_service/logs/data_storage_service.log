@@ -1,0 +1,135 @@
+2024-12-20 21:03:05 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-20 21:12:35 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-20 21:15:59 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-20 21:32:50 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-20 21:45:58 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-20 21:47:11 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:04:29 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:06:32 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:10:54 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:11:58 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:12:14 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:14:32 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:16:21 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:21:00 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:21:01 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:26:02 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:26:04 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:27:40 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:27:41 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:27:48 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:34:34 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:34:42 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:34:49 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:34:49 | INFO | src.app:on_startup:56 - Starting DataStorageService...
+2024-12-22 01:34:49 | INFO | src.db.database:init_db:57 - Initializing database...
+2024-12-22 01:34:49 | INFO | src.db.database:init_db:60 - Database initialized successfully
+2024-12-22 01:34:49 | INFO | src.app:on_startup:59 - Database initialized successfully
+2024-12-22 01:34:49 | INFO | src.app:on_startup:68 - Database connection established successfully
+2024-12-22 01:34:49 | INFO | src.app:on_startup:70 - Applying database migrations...
+2024-12-22 01:34:49 | ERROR | src.db.database:apply_migrations_sync:179 - Error applying migrations: No 'script_location' key found in configuration.
+2024-12-22 01:34:49 | ERROR | src.app:on_startup:80 - Unexpected error during service startup: No 'script_location' key found in configuration.
+2024-12-22 01:37:33 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:37:33 | INFO | src.app:on_startup:56 - Starting DataStorageService...
+2024-12-22 01:37:33 | INFO | src.db.database:init_db:57 - Initializing database...
+2024-12-22 01:37:33 | INFO | src.db.database:init_db:60 - Database initialized successfully
+2024-12-22 01:37:33 | INFO | src.app:on_startup:59 - Database initialized successfully
+2024-12-22 01:37:33 | INFO | src.app:on_startup:68 - Database connection established successfully
+2024-12-22 01:37:33 | INFO | src.app:on_startup:70 - Applying database migrations...
+2024-12-22 01:37:33 | ERROR | src.db.database:apply_migrations_sync:179 - Error applying migrations: No 'script_location' key found in configuration.
+2024-12-22 01:37:33 | ERROR | src.app:on_startup:80 - Unexpected error during service startup: No 'script_location' key found in configuration.
+2024-12-22 01:39:22 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:39:22 | INFO | src.app:on_startup:56 - Starting DataStorageService...
+2024-12-22 01:39:22 | INFO | src.db.database:init_db:40 - Initializing database...
+2024-12-22 01:39:22 | INFO | src.db.database:init_db:41 - Database initialized successfully
+2024-12-22 01:39:22 | INFO | src.app:on_startup:59 - Database initialized successfully
+2024-12-22 01:39:22 | INFO | src.app:on_startup:68 - Database connection established successfully
+2024-12-22 01:39:22 | INFO | src.app:on_startup:70 - Applying database migrations...
+2024-12-22 01:39:22 | ERROR | src.db.database:apply_migrations_sync:109 - Error applying migrations: No 'script_location' key found in configuration.
+2024-12-22 01:39:22 | ERROR | src.app:on_startup:80 - Unexpected error during service startup: No 'script_location' key found in configuration.
+2024-12-22 01:39:30 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:39:30 | INFO | src.app:on_startup:56 - Starting DataStorageService...
+2024-12-22 01:39:30 | INFO | src.db.database:init_db:40 - Initializing database...
+2024-12-22 01:39:30 | INFO | src.db.database:init_db:41 - Database initialized successfully
+2024-12-22 01:39:30 | INFO | src.app:on_startup:59 - Database initialized successfully
+2024-12-22 01:39:30 | INFO | src.app:on_startup:68 - Database connection established successfully
+2024-12-22 01:39:30 | INFO | src.app:on_startup:70 - Applying database migrations...
+2024-12-22 01:39:30 | ERROR | src.db.database:apply_migrations_sync:109 - Error applying migrations: No 'script_location' key found in configuration.
+2024-12-22 01:39:30 | ERROR | src.app:on_startup:80 - Unexpected error during service startup: No 'script_location' key found in configuration.
+2024-12-22 01:39:32 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:39:32 | INFO | src.app:on_startup:56 - Starting DataStorageService...
+2024-12-22 01:39:32 | INFO | src.db.database:init_db:40 - Initializing database...
+2024-12-22 01:39:32 | INFO | src.db.database:init_db:41 - Database initialized successfully
+2024-12-22 01:39:32 | INFO | src.app:on_startup:59 - Database initialized successfully
+2024-12-22 01:39:32 | INFO | src.app:on_startup:68 - Database connection established successfully
+2024-12-22 01:39:32 | INFO | src.app:on_startup:70 - Applying database migrations...
+2024-12-22 01:39:32 | ERROR | src.db.database:apply_migrations_sync:109 - Error applying migrations: No 'script_location' key found in configuration.
+2024-12-22 01:39:32 | ERROR | src.app:on_startup:80 - Unexpected error during service startup: No 'script_location' key found in configuration.
+2024-12-22 01:39:48 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:39:48 | INFO | src.app:on_startup:56 - Starting DataStorageService...
+2024-12-22 01:39:48 | INFO | src.db.database:init_db:40 - Initializing database...
+2024-12-22 01:39:48 | INFO | src.db.database:init_db:41 - Database initialized successfully
+2024-12-22 01:39:49 | INFO | src.app:on_startup:59 - Database initialized successfully
+2024-12-22 01:39:49 | INFO | src.app:on_startup:68 - Database connection established successfully
+2024-12-22 01:39:49 | INFO | src.app:on_startup:70 - Applying database migrations...
+2024-12-22 01:39:49 | ERROR | src.db.database:apply_migrations_sync:109 - Error applying migrations: No 'script_location' key found in configuration.
+2024-12-22 01:39:49 | ERROR | src.app:on_startup:80 - Unexpected error during service startup: No 'script_location' key found in configuration.
+2024-12-22 01:39:50 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:39:50 | INFO | src.app:on_startup:56 - Starting DataStorageService...
+2024-12-22 01:39:50 | INFO | src.db.database:init_db:40 - Initializing database...
+2024-12-22 01:39:50 | INFO | src.db.database:init_db:41 - Database initialized successfully
+2024-12-22 01:39:50 | INFO | src.app:on_startup:59 - Database initialized successfully
+2024-12-22 01:39:50 | INFO | src.app:on_startup:68 - Database connection established successfully
+2024-12-22 01:39:50 | INFO | src.app:on_startup:70 - Applying database migrations...
+2024-12-22 01:39:50 | ERROR | src.db.database:apply_migrations_sync:109 - Error applying migrations: No 'script_location' key found in configuration.
+2024-12-22 01:39:50 | ERROR | src.app:on_startup:80 - Unexpected error during service startup: No 'script_location' key found in configuration.
+2024-12-22 01:39:54 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:40:00 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:40:05 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:40:05 | INFO | src.app:on_startup:56 - Starting DataStorageService...
+2024-12-22 01:40:05 | INFO | src.db.database:init_db:40 - Initializing database...
+2024-12-22 01:40:05 | INFO | src.db.database:init_db:41 - Database initialized successfully
+2024-12-22 01:40:05 | INFO | src.app:on_startup:59 - Database initialized successfully
+2024-12-22 01:40:05 | INFO | src.app:on_startup:68 - Database connection established successfully
+2024-12-22 01:40:05 | INFO | src.app:on_startup:70 - Applying database migrations...
+2024-12-22 01:40:06 | ERROR | src.db.database:apply_migrations_sync:109 - Error applying migrations: No 'script_location' key found in configuration.
+2024-12-22 01:40:06 | ERROR | src.app:on_startup:80 - Unexpected error during service startup: No 'script_location' key found in configuration.
+2024-12-22 01:43:52 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-22 01:43:52 | INFO | src.app:on_startup:56 - Starting DataStorageService...
+2024-12-22 01:43:53 | INFO | src.db.database:init_db:41 - Initializing database...
+2024-12-22 01:43:53 | INFO | src.db.database:init_db:42 - Database initialized successfully
+2024-12-22 01:43:53 | INFO | src.app:on_startup:59 - Database initialized successfully
+2024-12-22 01:43:53 | INFO | src.app:on_startup:68 - Database connection established successfully
+2024-12-22 01:43:53 | INFO | src.app:on_startup:70 - Applying database migrations...
+2024-12-22 01:43:53 | INFO | src.db.database:apply_migrations_sync:108 - Migrations applied successfully
+2024-12-22 01:43:53 | INFO | src.app:on_startup:72 - Database migrations applied successfully
+2024-12-22 01:43:53 | INFO | src.app:on_startup:74 - DataStorageService started successfully
+2024-12-22 01:44:01 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:44:01 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:44:08 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:44:09 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:44:14 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:44:15 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:44:19 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:44:20 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:44:58 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:44:59 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:45:07 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:45:07 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:45:35 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-22 01:45:36 | ERROR | src.api.middleware.auth:dispatch:42 - Authentication failed: Not authenticated
+2024-12-23 20:52:17 | INFO | src.integrations.logging_client:__init__:22 - LoggingClient initialized for service: DataStorageService
+2024-12-23 20:52:17 | INFO | src.app:on_startup:56 - Starting DataStorageService...
+2024-12-23 20:52:17 | INFO | src.db.database:init_db:41 - Initializing database...
+2024-12-23 20:52:17 | INFO | src.db.database:init_db:42 - Database initialized successfully
+2024-12-23 20:52:17 | INFO | src.app:on_startup:59 - Database initialized successfully
+2024-12-23 20:52:17 | INFO | src.app:on_startup:68 - Database connection established successfully
+2024-12-23 20:52:17 | INFO | src.app:on_startup:70 - Applying database migrations...
+2024-12-23 20:52:17 | INFO | src.db.database:apply_migrations_sync:108 - Migrations applied successfully
+2024-12-23 20:52:17 | INFO | src.app:on_startup:72 - Database migrations applied successfully
+2024-12-23 20:52:17 | INFO | src.app:on_startup:74 - DataStorageService started successfully
+2024-12-23 21:11:00 | INFO | src.app:on_shutdown:88 - Shutting down DataStorageService...
+2024-12-23 21:11:00 | INFO | src.db.database:close_engine:50 - Closing database connection...
+2024-12-23 21:11:00 | INFO | src.db.database:close_engine:52 - Database connection closed
+2024-12-23 21:11:00 | INFO | src.app:on_shutdown:91 - Database connections closed successfully
+2024-12-23 21:11:00 | INFO | src.app:on_shutdown:92 - DataStorageService shut down successfully

@@ -1,0 +1,3 @@
+# services\data_storage_service\requirements.txt
+# Общие зависимости для всех сред
+-r requirements/base.txt

@@ -1,0 +1,7 @@
+# services\data_storage_service\requirements\prod.txt
+# Production dependencies
+-r base.txt              # Подключаем базовые зависимости
+
+# Дополнительные зависимости для продакшн
+gunicorn                 # WSGI сервер для продакшн
+prometheus-client        # Для мониторинга и метрик

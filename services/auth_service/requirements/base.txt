@@ -1,0 +1,16 @@
+# services\auth_service\requirements\base.txt
+fastapi[all]
+uvicorn[standard]
+sqlalchemy
+sqlalchemy[asyncio]
+asyncpg
+pydantic
+bcrypt
+pyjwt
+redis
+loguru
+alembic
+python-decouple
+pydantic-settings
+structlog
+httpx

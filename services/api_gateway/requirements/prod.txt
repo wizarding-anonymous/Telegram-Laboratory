@@ -1,0 +1,9 @@
+# services\api_gateway\requirements\prod.txt
+# Production environment requirements
+-r base.txt
+gunicorn
+uvicorn[standard]
+sentry-sdk
+newrelic
+supervisor
+python-json-logger

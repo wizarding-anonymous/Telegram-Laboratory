@@ -1,0 +1,9 @@
+# services\bot_constructor_service\requirements\dev.txt
+-r base.txt
+
+black
+flake8
+mypy
+isort
+pre-commit
+pyperclip

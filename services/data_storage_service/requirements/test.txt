@@ -1,0 +1,10 @@
+# services\data_storage_service\requirements\test.txt
+# Test dependencies
+-r base.txt              # Подключаем базовые зависимости
+
+# Зависимости для тестирования
+pytest                   # Основной фреймворк для тестирования
+pytest-asyncio           # Для тестирования асинхронных функций
+factory-boy              # Для создания фиктивных объектов в тестах
+faker                    # Для генерации случайных данных в тестах
+coverage                 # Для оценки покрытия тестами

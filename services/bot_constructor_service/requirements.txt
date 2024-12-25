@@ -1,0 +1,2 @@
+# services\bot_constructor_service\requirements.txt
+-r requirements/base.txt

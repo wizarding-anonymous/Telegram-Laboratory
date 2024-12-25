@@ -1,0 +1,14 @@
+# services\api_gateway\requirements\dev.txt
+# Development environment requirements
+-r base.txt
+black
+flake8
+isort
+mypy
+pytest
+pytest-asyncio
+pytest-cov
+pre-commit
+aioresponses
+responses
+factory-boy
