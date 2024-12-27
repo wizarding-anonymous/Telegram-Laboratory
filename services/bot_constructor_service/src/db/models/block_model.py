@@ -1,25 +1,45 @@
-# services\bot_constructor_service\src\db\models\block_model.py
-from sqlalchemy import Column, Integer, String, JSON, ForeignKey, DateTime, func
+# src/db/models/block_model.py
+
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, func
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
 from src.db.database import Base
 
 
 class Block(Base):
     """
-    Database model for blocks.
+    Model for storing block information.
     """
     __tablename__ = "blocks"
 
     id = Column(Integer, primary_key=True, index=True)
-    bot_id = Column(Integer, ForeignKey("bots.id", ondelete="CASCADE"), nullable=False, index=True, comment="ID of the bot this block belongs to")
-    type = Column(String(255), nullable=False, comment="Type of the block (e.g., 'message', 'action')")
-    content = Column(JSON, nullable=False, comment="Content of the block")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="Timestamp of creation")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="Timestamp of the last update")
+    bot_id = Column(Integer, ForeignKey("bots.id", ondelete="CASCADE"), nullable=False)
+    type = Column(String(255), nullable=False, index=True)
+    content = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Relationships
-    bot = relationship("Bot", back_populates="blocks")
-    connections = relationship("Connection", back_populates="source_block", cascade="all, delete-orphan")
+    connections = relationship(
+        "Connection",
+        primaryjoin="Block.id==Connection.source_block_id",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        backref="source_block"
+    )
+
 
     def __repr__(self):
-        return f"<Block(id={self.id}, bot_id={self.bot_id}, type={self.type})>"
+        return f"<Block(id={self.id}, type='{self.type}')>"
+    
+class Connection(Base):
+    """
+    Model for storing connections between blocks.
+    """
+    __tablename__ = "connections"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    source_block_id = Column(Integer, ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False, index=True)
+    target_block_id = Column(Integer, ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    def __repr__(self):
+         return f"<Connection(source_block_id={self.source_block_id}, target_block_id='{self.target_block_id}')>"

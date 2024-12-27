@@ -1,24 +1,24 @@
-# services\bot_constructor_service\src\db\models\bot_model.py
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, func
+from sqlalchemy import Column, Integer, String, Text, DateTime, func, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
 from src.db.database import Base
 
 
 class Bot(Base):
     """
-    Database model for bots.
+    Model for storing bot information.
     """
     __tablename__ = "bots"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, nullable=False, index=True, comment="ID of the user owning the bot")
-    name = Column(String(255), nullable=False, comment="Name of the bot")
-    description = Column(Text, nullable=True, comment="Description of the bot")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="Timestamp of creation")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="Timestamp of the last update")
-
-    # Relationships
-    blocks = relationship("Block", back_populates="bot", cascade="all, delete-orphan")
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    status = Column(String(50), nullable=True, default="draft")
+    version = Column(String(50), nullable=True, default="1.0.0")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    logic = Column(Text, nullable=True)
 
     def __repr__(self):
-        return f"<Bot(id={self.id}, name={self.name}, user_id={self.user_id})>"
+        return f"<Bot(id={self.id}, name='{self.name}')>"

@@ -1,4 +1,3 @@
-# services\bot_constructor_service\src\integrations\__init__.py
 from .telegram.telegram_api import TelegramAPI
 from .logging_client import LoggingClient
 from .auth_service import AuthService

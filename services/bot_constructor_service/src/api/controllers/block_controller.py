@@ -1,4 +1,3 @@
-# services/bot_constructor_service/src/api/controllers/block_controller.py
 """Block Controller module for managing bot logic blocks."""
 
 from typing import List, Optional

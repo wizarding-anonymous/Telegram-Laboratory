@@ -1,104 +1,74 @@
 # services\bot_constructor_service\src\core\flow_chart.py
-from typing import List, Dict
+# src/core/flow_chart.py
+from typing import Dict, Any, List
+from fastapi import HTTPException
 from loguru import logger
+
+from src.core.utils import handle_exceptions
+from src.db.repositories import BlockRepository
+from src.integrations.logging_client import LoggingClient
+
+logging_client = LoggingClient(service_name="bot_constructor")
 
 
 class FlowChartManager:
     """
-    Manager for generating and managing Flow Charts for bot logic.
+    Manages the flow chart representation of bot logic.
     """
 
-    def __init__(self):
-        """Initialize the FlowChartManager."""
-        logger.info("FlowChartManager initialized")
+    def __init__(
+        self,
+        block_repository: BlockRepository,
+    ):
+        self.block_repository = block_repository
 
-    def generate_flow_chart(self, blocks: List[Dict], connections: List[Dict]) -> Dict:
-        """
-        Generate a Flow Chart structure from blocks and connections.
+    @handle_exceptions
+    async def get_flow_chart(self, bot_id: int) -> Dict[str, Any]:
+        """Retrieves a flow chart representation of a bot's logic."""
+        logging_client.info(f"Getting flow chart for bot_id: {bot_id}")
+        
+        blocks = await self.block_repository.list_by_bot_id(bot_id)
+        if not blocks:
+            logging_client.warning(f"No blocks found for bot_id: {bot_id}")
+            return {}
 
-        Args:
-            blocks (List[Dict]): List of blocks representing bot logic.
-            connections (List[Dict]): List of connections between blocks.
-
-        Returns:
-            Dict: A dictionary representing the Flow Chart structure.
-        """
-        logger.info("Generating flow chart")
-        nodes = self._generate_nodes(blocks)
-        edges = self._generate_edges(connections)
-        flow_chart = {"nodes": nodes, "edges": edges}
-        logger.info(f"Flow chart generated: {flow_chart}")
+        flow_chart = self._build_flow_chart(blocks)
+        logging_client.info(f"Flow chart for bot_id: {bot_id} built successfully")
         return flow_chart
 
-    def _generate_nodes(self, blocks: List[Dict]) -> List[Dict]:
-        """
-        Generate nodes for the Flow Chart from blocks.
-
-        Args:
-            blocks (List[Dict]): List of blocks representing bot logic.
-
-        Returns:
-            List[Dict]: A list of nodes.
-        """
-        logger.info("Generating nodes for flow chart")
-        nodes = []
-        for block in blocks:
-            nodes.append({
-                "id": str(block["id"]),
-                "type": block["type"],
-                "data": block["content"],
-                "position": block.get("position", {"x": 0, "y": 0}),  # Default position
-            })
-        logger.debug(f"Nodes generated: {nodes}")
-        return nodes
-
-    def _generate_edges(self, connections: List[Dict]) -> List[Dict]:
-        """
-        Generate edges for the Flow Chart from connections.
-
-        Args:
-            connections (List[Dict]): List of connections between blocks.
-
-        Returns:
-            List[Dict]: A list of edges.
-        """
-        logger.info("Generating edges for flow chart")
+    def _build_flow_chart(self, blocks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Builds a flow chart representation from the provided blocks."""
+        logging_client.info("Building flow chart from blocks")
+        
+        nodes = {}
         edges = []
-        for connection in connections:
-            edges.append({
-                "id": f"{connection['source_block_id']}-{connection['target_block_id']}",
-                "source": str(connection["source_block_id"]),
-                "target": str(connection["target_block_id"]),
-                "type": "default",  # Type of edge (can be extended)
-            })
-        logger.debug(f"Edges generated: {edges}")
-        return edges
 
-    def update_node_position(self, node_id: int, new_position: Dict[str, int]) -> None:
-        """
-        Update the position of a node in the Flow Chart.
+        for block in blocks:
+            block_id = block.id
+            nodes[block_id] = {
+                "id": block_id,
+                "type": block.type,
+                "content": block.content if block.content else {},
+            }
 
-        Args:
-            node_id (int): ID of the node to update.
-            new_position (Dict[str, int]): New position as a dictionary with x and y coordinates.
-        """
-        logger.info(f"Updating position of node {node_id} to {new_position}")
-        # Example: Update position in the database or in-memory structure
+            if hasattr(block, "connections") and block.connections:
+                 for target_id in block.connections:
+                     edges.append({"source": block_id, "target": target_id})
+        
+        logging_client.info(f"Flow chart built. Nodes: {len(nodes)}, Edges: {len(edges)}")
+        return {"nodes": list(nodes.values()), "edges": edges}
 
-    def validate_flow_chart(self, flow_chart: Dict) -> bool:
-        """
-        Validate the Flow Chart structure.
 
-        Args:
-            flow_chart (Dict): The Flow Chart structure to validate.
+    @handle_exceptions
+    async def update_flow_chart(self, bot_id: int) -> Dict[str, Any]:
+        """Updates the flow chart representation for a bot."""
+        logging_client.info(f"Updating flow chart for bot_id: {bot_id}")
 
-        Returns:
-            bool: True if the Flow Chart is valid, False otherwise.
-        """
-        logger.info("Validating flow chart")
-        if "nodes" not in flow_chart or "edges" not in flow_chart:
-            logger.error("Flow chart validation failed: Missing nodes or edges")
-            return False
-        # Add more validation logic as needed
-        logger.info("Flow chart validated successfully")
-        return True
+        blocks = await self.block_repository.list_by_bot_id(bot_id)
+        if not blocks:
+             logging_client.warning(f"No blocks found for bot_id: {bot_id}")
+             return {}
+        
+        updated_flow_chart = self._build_flow_chart(blocks)
+        logging_client.info(f"Flow chart for bot_id: {bot_id} updated successfully")
+        return updated_flow_chart

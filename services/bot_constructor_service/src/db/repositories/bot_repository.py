@@ -1,98 +1,91 @@
-# services\bot_constructor_service\src\db\repositories\bot_repository.py
+from typing import List, Dict, Any, Tuple, Optional
+from fastapi import HTTPException
+from sqlalchemy import select, update, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import update, delete
-from src.db.models.bot_model import Bot
-from typing import Optional
+from loguru import logger
+
+from src.db.database import get_session
+from src.db.models import Bot
+from src.core.utils import handle_exceptions
+from src.integrations.logging_client import LoggingClient
+
+
+logging_client = LoggingClient(service_name="bot_constructor")
 
 
 class BotRepository:
     """
-    Repository for managing Bot database operations.
+    Repository for managing bot data in the database.
     """
 
-    def __init__(self, session: AsyncSession):
-        """
-        Initialize the repository with a database session.
-
-        Args:
-            session (AsyncSession): SQLAlchemy async session.
-        """
+    def __init__(self, session: AsyncSession = Depends(get_session)):
         self.session = session
+        logging_client.info("BotRepository initialized")
 
-    async def get_by_id(self, bot_id: int) -> Optional[Bot]:
-        """
-        Retrieve a bot by its ID.
-
-        Args:
-            bot_id (int): ID of the bot.
-
-        Returns:
-            Bot | None: The bot if found, otherwise None.
-        """
-        query = select(Bot).where(Bot.id == bot_id)
-        result = await self.session.execute(query)
-        return result.scalar_one_or_none()
-
-    async def get_all(self, user_id: int, skip: int = 0, limit: int = 100) -> list[Bot]:
-        """
-        Retrieve all bots for a specific user with pagination.
-
-        Args:
-            user_id (int): ID of the user.
-            skip (int): Number of records to skip.
-            limit (int): Maximum number of records to retrieve.
-
-        Returns:
-            list[Bot]: List of bots.
-        """
-        query = select(Bot).where(Bot.user_id == user_id).offset(skip).limit(limit)
-        result = await self.session.execute(query)
-        return result.scalars().all()
-
-    async def create(self, bot_data: dict) -> Bot:
-        """
-        Create a new bot.
-
-        Args:
-            bot_data (dict): Data for the new bot.
-
-        Returns:
-            Bot: The created bot.
-        """
+    @handle_exceptions
+    async def create(self, bot_data: Dict[str, Any]) -> Bot:
+        """Creates a new bot."""
+        logging_client.info(f"Creating bot with data: {bot_data}")
         bot = Bot(**bot_data)
         self.session.add(bot)
-        await self.session.flush()  # Flush to ensure the bot gets an ID before commit.
         await self.session.commit()
+        await self.session.refresh(bot)
+        logging_client.info(f"Bot with id: {bot.id} created successfully")
         return bot
 
-    async def update(self, bot_id: int, bot_data: dict) -> Optional[Bot]:
-        """
-        Update an existing bot.
+    @handle_exceptions
+    async def get_by_id(self, bot_id: int) -> Optional[Bot]:
+        """Gets a bot by its ID."""
+        logging_client.info(f"Getting bot with id: {bot_id}")
+        result = await self.session.execute(select(Bot).where(Bot.id == bot_id))
+        bot = result.scalar_one_or_none()
+        if bot:
+            logging_client.info(f"Bot with id: {bot_id} retrieved successfully")
+        else:
+             logging_client.warning(f"Bot with id: {bot_id} not found")
+        return bot
 
-        Args:
-            bot_id (int): ID of the bot to update.
-            bot_data (dict): Data to update.
-
-        Returns:
-            Bot | None: The updated bot if found, otherwise None.
-        """
-        query = update(Bot).where(Bot.id == bot_id).values(**bot_data).returning(Bot)
+    @handle_exceptions
+    async def list_paginated(self, page: int, page_size: int, user_id: int) -> Tuple[List[Bot], int]:
+        """Gets a paginated list of bots for a specific user."""
+        logging_client.info(f"Getting paginated list of bots for user_id: {user_id}")
+        offset = (page - 1) * page_size
+        
+        count_query = await self.session.execute(select(func.count()).where(Bot.user_id == user_id))
+        total = count_query.scalar_one()
+        
+        query = (
+            select(Bot)
+            .where(Bot.user_id == user_id)
+            .order_by(Bot.created_at.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
         result = await self.session.execute(query)
+        bots = list(result.scalars().all())
+        logging_client.info(f"Found {len(bots)} of {total} bots for user_id: {user_id}")
+        return bots, total
+
+
+    @handle_exceptions
+    async def update(self, bot_id: int, bot_data: Dict[str, Any]) -> Bot:
+        """Updates an existing bot."""
+        logging_client.info(f"Updating bot with id: {bot_id}")
+        query = update(Bot).where(Bot.id == bot_id).values(bot_data).returning(Bot)
+        result = await self.session.execute(query)
+        updated_bot = result.scalar_one_or_none()
+        if not updated_bot:
+             logging_client.warning(f"Bot with id: {bot_id} not found")
+             raise HTTPException(status_code=404, detail="Bot not found")
         await self.session.commit()
-        return result.scalar_one_or_none()
+        logging_client.info(f"Bot with id: {bot_id} updated successfully")
+        return updated_bot
 
-    async def delete(self, bot_id: int) -> bool:
-        """
-        Delete a bot by its ID.
-
-        Args:
-            bot_id (int): ID of the bot to delete.
-
-        Returns:
-            bool: True if the bot was deleted, False otherwise.
-        """
+    @handle_exceptions
+    async def delete(self, bot_id: int) -> None:
+        """Deletes a bot."""
+        logging_client.info(f"Deleting bot with id: {bot_id}")
         query = delete(Bot).where(Bot.id == bot_id)
-        result = await self.session.execute(query)
+        await self.session.execute(query)
         await self.session.commit()
-        return result.rowcount > 0
+        logging_client.info(f"Bot with id: {bot_id} deleted successfully")

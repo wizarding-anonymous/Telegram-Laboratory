@@ -1,121 +1,185 @@
-# services\bot_constructor_service\src\integrations\telegram_api.py
+from typing import Dict, Any, Optional, List
 import httpx
+from fastapi import HTTPException
 from loguru import logger
-import os
+import json
+
+from src.config import settings
+from src.core.utils import handle_exceptions
+from src.integrations.logging_client import LoggingClient
+
+logging_client = LoggingClient(service_name="bot_constructor")
 
 class TelegramAPI:
     """
-    Client for interacting with the Telegram Bot API.
+    A client for interacting with the Telegram Bot API.
     """
 
-    def __init__(self, bot_token: str = None):
-        """
-        Initialize the TelegramAPI client.
+    def __init__(self, client: httpx.AsyncClient = None):
+         self.base_url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}"
+         self.client = client or httpx.AsyncClient()
+         logging_client.info("TelegramAPI initialized")
 
-        Args:
-            bot_token (str): Telegram bot token. If not provided, loads from environment variable TELEGRAM_BOT_TOKEN.
-        """
-        self.bot_token = bot_token or os.getenv("TELEGRAM_BOT_TOKEN")
-        if not self.bot_token:
-            raise ValueError("Telegram bot token is required")
-        self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
-        logger.info("TelegramAPI client initialized")
-
-    async def send_message(self, chat_id: int, text: str, parse_mode: str = "Markdown") -> dict:
-        """
-        Send a message to a Telegram chat.
-
-        Args:
-            chat_id (int): Chat ID to send the message to.
-            text (str): Message text.
-            parse_mode (str): Formatting style for the message (e.g., "Markdown", "HTML").
-
-        Returns:
-            dict: Response from the Telegram API.
-        """
-        url = f"{self.base_url}/sendMessage"
-        payload = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": parse_mode,
-        }
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload)
-            if response.status_code != 200:
-                logger.error(f"Failed to send message: {response.text}")
-                raise httpx.HTTPStatusError(
-                    f"Error sending message: {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
-            logger.info(f"Message sent to chat {chat_id}: {text}")
+    async def _make_request(self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> Any:
+        """Makes an asynchronous request to the Telegram API."""
+        url = f"{self.base_url}/{endpoint}"
+        logging_client.debug(f"Making {method} request to: {url}, data: {data}, params: {params}")
+        try:
+            response = await self.client.request(method, url, json=data, params=params)
+            response.raise_for_status()
             return response.json()
+        except httpx.HTTPError as exc:
+            logging_client.error(f"HTTP Error: {exc}")
+            if exc.response and exc.response.text:
+                 try:
+                      error_details = exc.response.json()
+                      logging_client.error(f"Telegram API error: {error_details}")
+                      raise HTTPException(
+                         status_code=exc.response.status_code, detail=f"Telegram API Error: {error_details.get('description') or error_details}"
+                       ) from exc
+                 except json.JSONDecodeError:
+                      logging_client.error(f"Invalid response from Telegram API: {exc.response.text}")
+                      raise HTTPException(
+                           status_code=exc.response.status_code, detail=f"Telegram API Error: Invalid response"
+                       ) from exc
+            raise HTTPException(
+                    status_code=500, detail=f"Telegram API Error: {exc}"
+            ) from exc
+        except Exception as exc:
+            logging_client.exception(f"Unexpected error: {exc}")
+            raise HTTPException(status_code=500, detail="Internal server error") from exc
 
-    async def set_webhook(self, webhook_url: str) -> dict:
-        """
-        Set a webhook for the Telegram bot.
 
-        Args:
-            webhook_url (str): The URL to receive Telegram updates.
+    @handle_exceptions
+    async def send_message(self, chat_id: int, text: str, reply_markup: Optional[List[List[Dict[str, Any]]]] = None, inline_keyboard: Optional[List[List[Dict[str, Any]]]] = None) -> Any:
+        """Sends a text message to the specified chat."""
+        logging_client.info(f"Sending text message to chat_id: {chat_id}")
 
-        Returns:
-            dict: Response from the Telegram API.
-        """
-        url = f"{self.base_url}/setWebhook"
-        payload = {"url": webhook_url}
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload)
-            if response.status_code != 200:
-                logger.error(f"Failed to set webhook: {response.text}")
-                raise httpx.HTTPStatusError(
-                    f"Error setting webhook: {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
-            logger.info(f"Webhook set: {webhook_url}")
-            return response.json()
+        data = {"chat_id": chat_id, "text": text}
+        if reply_markup:
+                data["reply_markup"] = {"keyboard": reply_markup, "resize_keyboard": True}
+        if inline_keyboard:
+                data["reply_markup"] = {"inline_keyboard": inline_keyboard}
 
-    async def delete_webhook(self) -> dict:
-        """
-        Delete the webhook for the Telegram bot.
+        return await self._make_request("POST", "sendMessage", data=data)
 
-        Returns:
-            dict: Response from the Telegram API.
-        """
-        url = f"{self.base_url}/deleteWebhook"
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url)
-            if response.status_code != 200:
-                logger.error(f"Failed to delete webhook: {response.text}")
-                raise httpx.HTTPStatusError(
-                    f"Error deleting webhook: {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
-            logger.info("Webhook deleted successfully")
-            return response.json()
+    @handle_exceptions
+    async def send_photo(self, chat_id: int, photo: str, caption: Optional[str] = None) -> Any:
+        """Sends a photo to the specified chat."""
+        logging_client.info(f"Sending photo to chat_id: {chat_id}")
 
-    async def get_updates(self, offset: int = 0, timeout: int = 10) -> dict:
-        """
-        Fetch updates from the Telegram API.
+        data = {"chat_id": chat_id, "photo": photo}
+        if caption:
+             data["caption"] = caption
 
-        Args:
-            offset (int): Identifier of the first update to return.
-            timeout (int): Timeout in seconds for long polling.
+        return await self._make_request("POST", "sendPhoto", data=data)
 
-        Returns:
-            dict: Response from the Telegram API.
-        """
-        url = f"{self.base_url}/getUpdates"
-        params = {"offset": offset, "timeout": timeout}
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params)
-            if response.status_code != 200:
-                logger.error(f"Failed to get updates: {response.text}")
-                raise httpx.HTTPStatusError(
-                    f"Error getting updates: {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
-            logger.info("Updates fetched successfully")
-            return response.json()
+    @handle_exceptions
+    async def send_video(self, chat_id: int, video: str, caption: Optional[str] = None) -> Any:
+        """Sends a video to the specified chat."""
+        logging_client.info(f"Sending video to chat_id: {chat_id}")
+
+        data = {"chat_id": chat_id, "video": video}
+        if caption:
+             data["caption"] = caption
+        return await self._make_request("POST", "sendVideo", data=data)
+
+    @handle_exceptions
+    async def send_audio(self, chat_id: int, audio: str, caption: Optional[str] = None) -> Any:
+        """Sends an audio to the specified chat."""
+        logging_client.info(f"Sending audio to chat_id: {chat_id}")
+        data = {"chat_id": chat_id, "audio": audio}
+        if caption:
+            data["caption"] = caption
+        return await self._make_request("POST", "sendAudio", data=data)
+
+    @handle_exceptions
+    async def send_document(self, chat_id: int, document: str, caption: Optional[str] = None) -> Any:
+        """Sends a document to the specified chat."""
+        logging_client.info(f"Sending document to chat_id: {chat_id}")
+        data = {"chat_id": chat_id, "document": document}
+        if caption:
+            data["caption"] = caption
+        return await self._make_request("POST", "sendDocument", data=data)
+
+    @handle_exceptions
+    async def send_location(self, chat_id: int, latitude: float, longitude: float) -> Any:
+        """Sends a location to the specified chat."""
+        logging_client.info(f"Sending location to chat_id: {chat_id}")
+        data = {"chat_id": chat_id, "latitude": latitude, "longitude": longitude}
+        return await self._make_request("POST", "sendLocation", data=data)
+
+    @handle_exceptions
+    async def send_sticker(self, chat_id: int, sticker: str) -> Any:
+        """Sends a sticker to the specified chat."""
+        logging_client.info(f"Sending sticker to chat_id: {chat_id}")
+        data = {"chat_id": chat_id, "sticker": sticker}
+        return await self._make_request("POST", "sendSticker", data=data)
+
+    @handle_exceptions
+    async def send_contact(self, chat_id: int, phone_number: str, first_name: str, last_name: Optional[str] = None) -> Any:
+        """Sends a contact to the specified chat."""
+        logging_client.info(f"Sending contact to chat_id: {chat_id}")
+        data = {"chat_id": chat_id, "phone_number": phone_number, "first_name": first_name}
+        if last_name:
+            data["last_name"] = last_name
+        return await self._make_request("POST", "sendContact", data=data)
+    
+    @handle_exceptions
+    async def send_venue(self, chat_id: int, latitude: float, longitude: float, title: str, address: str) -> Any:
+        """Sends a venue to the specified chat."""
+        logging_client.info(f"Sending venue to chat_id: {chat_id}")
+        data = {"chat_id": chat_id, "latitude": latitude, "longitude": longitude, "title": title, "address": address}
+        return await self._make_request("POST", "sendVenue", data=data)
+
+    @handle_exceptions
+    async def send_game(self, chat_id: int, game_short_name: str) -> Any:
+         """Sends a game to the specified chat."""
+         logging_client.info(f"Sending game to chat_id: {chat_id}")
+         data = {"chat_id": chat_id, "game_short_name": game_short_name}
+         return await self._make_request("POST", "sendGame", data=data)
+
+    @handle_exceptions
+    async def send_poll(self, chat_id: int, question: str, options: List[str]) -> Any:
+        """Sends a poll to the specified chat."""
+        logging_client.info(f"Sending poll to chat_id: {chat_id}")
+        data = {"chat_id": chat_id, "question": question, "options": options}
+        return await self._make_request("POST", "sendPoll", data=data)
+
+    @handle_exceptions
+    async def set_webhook(self, url: str) -> Any:
+         """Sets a webhook for the bot."""
+         logging_client.info(f"Setting webhook url: {url}")
+         data = {"url": url}
+         return await self._make_request("POST", "setWebhook", data=data)
+    
+    @handle_exceptions
+    async def delete_webhook(self) -> Any:
+         """Deletes a webhook for the bot."""
+         logging_client.info("Deleting webhook")
+         return await self._make_request("POST", "deleteWebhook")
+    
+    @handle_exceptions
+    async def get_webhook_info(self) -> Any:
+        """Gets webhook info for the bot."""
+        logging_client.info("Getting webhook info")
+        return await self._make_request("GET", "getWebhookInfo")
+
+    @handle_exceptions
+    async def get_updates(self, offset: Optional[int] = None, limit: Optional[int] = None, timeout: Optional[int] = None) -> Any:
+        """Gets updates for the bot."""
+        logging_client.info("Getting updates from Telegram API")
+        params = {}
+        if offset:
+            params["offset"] = offset
+        if limit:
+            params["limit"] = limit
+        if timeout:
+            params["timeout"] = timeout
+        return await self._make_request("GET", "getUpdates", params=params)
+
+    async def close(self) -> None:
+        """Closes the httpx client"""
+        if self.client:
+              await self.client.aclose()
+              logging_client.info("Telegram client closed")

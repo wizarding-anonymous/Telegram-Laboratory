@@ -1,4 +1,3 @@
-# services/bot_constructor_service/src/integrations/telegram/client.py
 import httpx
 from loguru import logger
 import os
