@@ -1,22 +1,34 @@
 # user_dashboard/src/schemas/bot_schema.py
-
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
-class BotCreate(BaseModel):
-    name: str = Field(..., example="MyAwesomeBot")
-    description: Optional[str] = Field(None, example="This bot does amazing things!")
+class BotBase(BaseModel):
+    """
+    Базовая модель данных для бота.
+    """
+    name: str = Field(..., title="Bot Name", max_length=255, description="Название бота")
+    description: Optional[str] = Field(None, title="Bot Description", description="Описание бота")
 
-class BotUpdate(BaseModel):
-    name: Optional[str] = Field(None, example="UpdatedBotName")
-    description: Optional[str] = Field(None, example="Updated description of the bot.")
+class BotCreateRequest(BotBase):
+    """
+    Модель данных для создания нового бота.
+    """
+    pass
 
-class BotResponse(BaseModel):
-    id: int
-    name: str
-    description: Optional[str]
-    created_at: datetime
+class BotUpdateRequest(BaseModel):
+    """
+    Модель данных для обновления информации о боте.
+    """
+    name: Optional[str] = Field(None, title="Bot Name", max_length=255, description="Название бота")
+    description: Optional[str] = Field(None, title="Bot Description", description="Описание бота")
+
+class BotResponse(BotBase):
+    """
+    Модель ответа для отображения информации о боте.
+    """
+    id: int = Field(..., title="Bot ID", description="Уникальный идентификатор бота")
+    created_at: datetime = Field(..., title="Created At", description="Дата и время создания бота")
 
     class Config:
         orm_mode = True
