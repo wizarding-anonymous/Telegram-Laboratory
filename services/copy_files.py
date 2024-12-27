@@ -1,12 +1,12 @@
 import os
 import pyperclip
 
-# Папка для сканирования
-root_folder = "auth_service"
+# Список корневых папок для сканирования
+root_folders = ["api_gateway", "auth_service", "bot_constructor_service", "data_storage_service"]  # Укажите ваши папки
 
 # Списки исключений
 excluded_files = ["setup.cfg", "alembic.log", "auth_service.log"]  # Укажите файлы, которые нужно пропустить
-excluded_folders = ["venv","migrations","__pycache__"]  # Укажите папки, которые нужно пропустить
+excluded_folders = ["venv", "migrations", "__pycache__"]  # Укажите папки, которые нужно пропустить
 
 def collect_files_with_contents(folder, excluded_files, excluded_folders):
     file_list = []
@@ -33,20 +33,24 @@ def collect_files_with_contents(folder, excluded_files, excluded_folders):
     return file_list
 
 def main():
-    # Проверка, существует ли папка
-    if not os.path.exists(root_folder):
-        print(f"Папка '{root_folder}' не найдена. Проверьте путь.")
-        return
+    all_files_with_contents = []
 
-    # Получаем список файлов с содержимым
-    files_with_contents = collect_files_with_contents(root_folder, excluded_files, excluded_folders)
+    for root_folder in root_folders:
+        # Проверка, существует ли папка
+        if not os.path.exists(root_folder):
+            print(f"Папка '{root_folder}' не найдена. Проверьте путь.")
+            continue
 
-    if not files_with_contents:
+        # Получаем список файлов с содержимым
+        files_with_contents = collect_files_with_contents(root_folder, excluded_files, excluded_folders)
+        all_files_with_contents.extend(files_with_contents)
+
+    if not all_files_with_contents:
         print("Нет файлов для копирования в буфер обмена.")
         return
 
     # Формируем текст для буфера обмена
-    clipboard_text = "\n".join(files_with_contents)
+    clipboard_text = "\n".join(all_files_with_contents)
 
     # Копируем в буфер обмена
     try:
