@@ -1,7 +1,8 @@
-from typing import List, Any
+from typing import List, Any, Dict
 from fastapi import HTTPException
 from loguru import logger
 from urllib.parse import urlparse
+import re
 
 from src.integrations.logging_client import LoggingClient
 
@@ -41,36 +42,23 @@ def validate_block_type(block_type: str) -> None:
         "send_venue",
         "send_game",
         "send_poll",
-        "reply_keyboard",
-        "inline_keyboard",
-        "callback_query_handler",
-        "callback_response",
-        "chat_member",
-        "chat_title",
-        "chat_description",
-        "chat_pin_message",
-        "chat_unpin_message",
-        "webhook",
-        "polling",
-        "state_machine",
-        "custom_filters",
-        "middleware",
-        "rate_limiting",
-        "error_handling",
-        "logging",
-        "database",
-        "db_connect",
-        "db_query",
-        "api_request",
+        "keyboard",
         "if_condition",
         "loop",
-        "switch_case",
-        "wait_for_message",
-        "timer",
-        "user_data",
+        "api_request",
+        "database",
+        "webhook",
+        "callback",
         "variable",
-         "start",
-          "flow_chart",
+        "try_catch",
+        "raise_error",
+        "handle_exception",
+        "log_message",
+        "timer",
+        "state_machine",
+        "custom_filter",
+        "rate_limiting",
+        "start"
     ]
     if not isinstance(block_type, str) or block_type not in allowed_types:
         logger.error(f"Invalid block type: {block_type}")
@@ -104,8 +92,8 @@ def validate_connections(source_block_id: int, target_block_id: int) -> None:
 
 def validate_content(content: Any) -> None:
     """Validates the block content (for basic checks only)."""
-    if not isinstance(content, (dict, str)) and content is not None:
-        logger.error(f"Invalid content type: {type(content)}. Must be a dictionary or string.")
+    if not isinstance(content, (dict, str, type(None))) :
+        logger.error(f"Invalid content type: {type(content)}. Must be a dictionary, string or None.")
         raise HTTPException(
             status_code=400, detail="Invalid content. Must be a dictionary, string or None."
         )
@@ -164,3 +152,112 @@ def validate_version(version: str) -> None:
         logger.error(f"Invalid version: {version}")
         raise HTTPException(status_code=400, detail="Invalid version")
     logger.debug(f"Version: {version} is valid.")
+
+def validate_variable_data(data: Dict[str, Any]) -> None:
+    """Validates variable data structure."""
+    if not isinstance(data, dict):
+        logger.error(f"Invalid variable data: {data}. Must be a dictionary.")
+        raise HTTPException(status_code=400, detail="Invalid variable data. Must be a dictionary.")
+    if "name" not in data or not isinstance(data["name"], str) or not data["name"].strip():
+        logger.error(f"Invalid variable name: {data.get('name')}")
+        raise HTTPException(status_code=400, detail="Invalid variable name. Must be a non-empty string.")
+    if "action" not in data or not isinstance(data["action"], str) or data["action"] not in ["define", "assign", "retrieve", "update"]:
+        logger.error(f"Invalid variable action: {data.get('action')}")
+        raise HTTPException(status_code=400, detail="Invalid variable action. Must be define, assign, retrieve or update.")
+    logger.debug(f"Variable data: {data} is valid.")
+
+def validate_api_request_data(data: Dict[str, Any]) -> None:
+    """Validates api request data"""
+    if not isinstance(data, dict):
+        logger.error(f"Invalid api request data: {data}. Must be a dictionary.")
+        raise HTTPException(status_code=400, detail="Invalid api request data. Must be a dictionary.")
+    if "url" not in data or not isinstance(data['url'], str) or not data['url'].strip():
+         logger.error(f"Invalid api request url: {data.get('url')}")
+         raise HTTPException(status_code=400, detail="Invalid api request url. Must be a non-empty string.")
+    if "method" not in data or not isinstance(data['method'], str) or data['method'].upper() not in ["GET", "POST", "PUT", "DELETE"]:
+         logger.error(f"Invalid api request method: {data.get('method')}")
+         raise HTTPException(status_code=400, detail="Invalid api request method. Must be GET, POST, PUT or DELETE")
+    if data.get("headers") and not isinstance(data.get('headers'), dict):
+        logger.error(f"Invalid headers for api request, headers must be dictionary")
+        raise HTTPException(status_code=400, detail="Invalid headers for api request, headers must be dictionary")
+    if data.get("params") and not isinstance(data.get('params'), dict):
+        logger.error(f"Invalid params for api request, params must be dictionary")
+        raise HTTPException(status_code=400, detail="Invalid params for api request, params must be dictionary")
+    if data.get("body") and not isinstance(data.get("body"), (dict, str, type(None))):
+         logger.error(f"Invalid body for api request, body must be dictionary, string or None")
+         raise HTTPException(status_code=400, detail="Invalid body for api request, body must be dictionary, string or None")
+    logger.debug(f"Api request data is valid.")
+
+def validate_database_data(data: Dict[str, Any]) -> None:
+   """Validates database data"""
+   if not isinstance(data, dict):
+      logger.error(f"Invalid database data: {data}. Must be a dictionary.")
+      raise HTTPException(status_code=400, detail="Invalid database data. Must be a dictionary.")
+   if "query" not in data or not isinstance(data['query'], str) or not data['query'].strip():
+      logger.error(f"Invalid database query: {data.get('query')}")
+      raise HTTPException(status_code=400, detail="Invalid database query. Must be a non-empty string.")
+   if data.get("params") and not isinstance(data.get("params"), dict):
+       logger.error(f"Invalid params for database query, params must be dictionary")
+       raise HTTPException(status_code=400, detail="Invalid params for database query, params must be dictionary")
+   logger.debug(f"Database data is valid")
+   
+def validate_timer_data(data: Dict[str, Any]) -> None:
+    """Validates timer data"""
+    if not isinstance(data, dict):
+        logger.error(f"Invalid timer data: {data}. Must be a dictionary.")
+        raise HTTPException(status_code=400, detail="Invalid timer data. Must be a dictionary.")
+    if "delay" not in data or not isinstance(data['delay'], (int, str)):
+         logger.error(f"Invalid delay for timer block: {data.get('delay')}")
+         raise HTTPException(status_code=400, detail="Invalid delay for timer block, must be int or str")
+    logger.debug(f"Timer data is valid")
+
+def validate_state_machine_data(data: Dict[str, Any]) -> None:
+  """Validates state machine data"""
+  if not isinstance(data, dict):
+        logger.error(f"Invalid state machine data: {data}. Must be a dictionary.")
+        raise HTTPException(status_code=400, detail="Invalid state machine data. Must be a dictionary.")
+  if "state" not in data or not isinstance(data['state'], str) or not data['state'].strip():
+       logger.error(f"Invalid state in state machine block: {data.get('state')}")
+       raise HTTPException(status_code=400, detail="Invalid state in state machine block. Must be a non-empty string.")
+  if "transitions" not in data or not isinstance(data['transitions'], list):
+       logger.error(f"Invalid transitions in state machine block: {data.get('transitions')}. Must be a list")
+       raise HTTPException(status_code=400, detail="Invalid transitions in state machine block, must be a list.")
+  for transition in data['transitions']:
+    if not isinstance(transition, dict):
+      logger.error(f"Invalid transition {transition}, must be a dictionary")
+      raise HTTPException(status_code=400, detail="Invalid transition, must be a dictionary")
+    if "trigger" not in transition or not isinstance(transition['trigger'], str) or not transition['trigger'].strip():
+      logger.error(f"Invalid trigger: {transition.get('trigger')}")
+      raise HTTPException(status_code=400, detail="Invalid trigger, must be a string")
+    if "target_state" not in transition or not isinstance(transition['target_state'], str) or not transition['target_state'].strip():
+       logger.error(f"Invalid target state: {transition.get('target_state')}")
+       raise HTTPException(status_code=400, detail="Invalid target state, must be a string")
+  logger.debug(f"State machine data is valid")
+
+def validate_custom_filter_data(data: Dict[str, Any]) -> None:
+    """Validates custom filter data"""
+    if not isinstance(data, dict):
+        logger.error(f"Invalid custom filter data: {data}. Must be a dictionary.")
+        raise HTTPException(status_code=400, detail="Invalid custom filter data. Must be a dictionary.")
+    if "filter" not in data or not isinstance(data['filter'], str) or not data['filter'].strip():
+         logger.error(f"Invalid filter in custom filter block: {data.get('filter')}")
+         raise HTTPException(status_code=400, detail="Invalid filter in custom filter block, must be a non empty string.")
+    try:
+       compile(data["filter"], '<string>', 'eval')
+    except SyntaxError:
+       logger.error(f"Invalid syntax for filter: {data.get('filter')}")
+       raise HTTPException(status_code=400, detail="Invalid syntax for filter, must be valid python syntax")
+    logger.debug(f"Custom filter data is valid")
+
+def validate_rate_limiting_data(data: Dict[str, Any]) -> None:
+    """Validates rate limiting data"""
+    if not isinstance(data, dict):
+        logger.error(f"Invalid rate limiting data: {data}. Must be a dictionary.")
+        raise HTTPException(status_code=400, detail="Invalid rate limiting data. Must be a dictionary.")
+    if "limit" not in data or not isinstance(data['limit'], (int, str)):
+         logger.error(f"Invalid limit in rate limiting block: {data.get('limit')}")
+         raise HTTPException(status_code=400, detail="Invalid limit in rate limiting block, must be int or string.")
+    if "interval" not in data or not isinstance(data['interval'], (int, str)):
+         logger.error(f"Invalid interval in rate limiting block: {data.get('interval')}")
+         raise HTTPException(status_code=400, detail="Invalid interval in rate limiting block, must be int or string")
+    logger.debug(f"Rate limiting data is valid")
