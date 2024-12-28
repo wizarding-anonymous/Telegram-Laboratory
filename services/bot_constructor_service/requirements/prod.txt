@@ -1,4 +1,4 @@
-# services\bot_constructor_service\requirements\prod.txt
+# Production dependencies
 -r base.txt
 
 prometheus-client

@@ -1,4 +1,3 @@
-# services\bot_constructor_service\src\core\utils\__init__.py
 """Utility functions for the core module."""
 
 from .helpers import handle_exceptions
@@ -13,8 +12,8 @@ from .validators import (
     validate_permission,
     validate_user_id,
     validate_block_ids,
-    validate_status,  # Новый импорт
-    validate_version,  # Новый импорт
+    validate_status,
+    validate_version,
 )
 
 __all__ = [
@@ -29,6 +28,6 @@ __all__ = [
     "validate_permission",
     "validate_user_id",
     "validate_block_ids",
-    "validate_status",  # Новый элемент в __all__
-    "validate_version",  # Новый элемент в __all__
+    "validate_status",
+    "validate_version",
 ]

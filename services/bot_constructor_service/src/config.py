@@ -1,8 +1,8 @@
-# services\bot_constructor_service\src\config.py
 import os
 from pydantic_settings import BaseSettings
 from pydantic import Field
 import string
+
 
 class Settings(BaseSettings):
     """
@@ -52,7 +52,13 @@ class Settings(BaseSettings):
     REDIS_URL: str = Field("redis://localhost:6379/0", env="REDIS_URL")
 
     # Auth Service settings
-    AUTH_SERVICE_URL: str = Field("http://localhost:8001", env="AUTH_SERVICE_URL")
+    AUTH_SERVICE_URL: str = Field("http://localhost:8002", env="AUTH_SERVICE_URL")
+    
+    # Data Storage Service settings
+    DATA_STORAGE_SERVICE_URL: str = Field("http://localhost:8001", env="DATA_STORAGE_SERVICE_URL")
+    
+    # Logging Service settings
+    LOGGING_SERVICE_URL: str = Field("http://localhost:8003", env="LOGGING_SERVICE_URL")
 
     # Telegram API settings
     TELEGRAM_BOT_TOKEN: str = Field(..., env="TELEGRAM_BOT_TOKEN")
@@ -69,11 +75,11 @@ class Settings(BaseSettings):
 
     # CORS settings
     ALLOWED_ORIGINS: str = Field("http://localhost,http://127.0.0.1", env="ALLOWED_ORIGINS")
+   
 
     class Config:
         env_file = ".env"  # Use a .env file to load environment variables
         env_file_encoding = "utf-8"
-
 
 # Load configuration
 settings = Settings()
@@ -89,3 +95,5 @@ if __name__ == "__main__":
     print("Auth Service URL:", settings.AUTH_SERVICE_URL)
     print("Telegram Bot Token:", settings.TELEGRAM_BOT_TOKEN)
     print("Allowed Origins:", settings.ALLOWED_ORIGINS)
+    print("Data Storage Service URL:", settings.DATA_STORAGE_SERVICE_URL)
+    print("Logging Service URL:", settings.LOGGING_SERVICE_URL)

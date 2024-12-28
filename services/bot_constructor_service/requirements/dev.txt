@@ -1,9 +1,14 @@
-# services\bot_constructor_service\requirements\dev.txt
+# Development dependencies
 -r base.txt
 
+# Code Style
 black
 flake8
 mypy
 isort
 pre-commit
 pyperclip
+pytest
+pytest-asyncio
+factory-boy
+faker

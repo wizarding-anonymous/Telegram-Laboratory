@@ -1,59 +1,58 @@
-# services\bot_constructor_service\src\api\middleware\auth.py
-from fastapi import Request, HTTPException
+from typing import List, Optional
+from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
-from typing import Optional
+from src.integrations.auth_service import AuthService, get_current_user
+from src.config import settings
+from src.integrations.logging_client import LoggingClient
+
+logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
+
 
 class AuthMiddleware:
     """
-    Middleware for JWT token validation and user authentication.
+    Middleware for authenticating requests using JWT tokens.
     """
-    def __init__(self, secret_key: str, algorithm: str):
+    def __init__(self, auth_service: AuthService = Depends(),):
+        self.auth_service = auth_service
+        self.http_bearer = HTTPBearer()
+        logging_client.info("AuthMiddleware initialized")
+
+    async def __call__(self, request: Request, call_next):
         """
-        Initialize the AuthMiddleware with a secret key and algorithm.
-
-        Args:
-            secret_key (str): Secret key for decoding JWT tokens.
-            algorithm (str): Algorithm used for JWT encoding and decoding.
+        Authenticates the user based on the JWT token in the Authorization header.
         """
-        self.secret_key = secret_key
-        self.algorithm = algorithm
-        self.auth_scheme = HTTPBearer()
-
-    async def verify_token(self, credentials: Optional[HTTPAuthorizationCredentials]) -> dict:
-        """
-        Verify the provided JWT token and extract its payload.
-
-        Args:
-            credentials (Optional[HTTPAuthorizationCredentials]): Authorization credentials.
-
-        Returns:
-            dict: Decoded JWT payload.
-
-        Raises:
-            HTTPException: If the token is invalid or missing.
-        """
-        if credentials is None:
-            raise HTTPException(status_code=403, detail="Authorization credentials are required.")
+        if request.url.path in ["/health", "/metrics"]:
+            return await call_next(request)  # Skip authentication for health and metrics endpoints
 
         try:
-            payload = jwt.decode(
-                credentials.credentials,
-                self.secret_key,
-                algorithms=[self.algorithm]
-            )
-        except JWTError as e:
-            raise HTTPException(status_code=403, detail=f"Invalid token: {str(e)}")
+             credentials: HTTPAuthorizationCredentials = await self.http_bearer(request)
+        except HTTPException:
+            logging_client.warning("Authorization header is missing or malformed.")
+            raise HTTPException(status_code=401, detail="Authorization header is missing or malformed")
 
-        return payload
+        try:
+            await self.auth_service.get_user_by_token(credentials.credentials)
+        except HTTPException as e:
+            if e.status_code == 401:
+                logging_client.warning("Invalid or expired token")
+                raise HTTPException(status_code=401, detail="Invalid or expired token") from e
+            logging_client.error(f"Unexpected error during authorization: {e}")
+            raise
 
-    async def __call__(self, request: Request):
-        """
-        Middleware entry point to validate and attach user data to the request.
+        response = await call_next(request)
+        return response
 
-        Args:
-            request (Request): The incoming HTTP request.
-        """
-        credentials: HTTPAuthorizationCredentials = await self.auth_scheme(request)
-        user_data = await self.verify_token(credentials)
-        request.state.user = user_data
+
+def admin_required():
+    """
+    Dependency to ensure the user has the "admin" role.
+    """
+    logging_client.info("Checking if user has admin rights")
+
+    async def check_admin(user: dict = Depends(get_current_user)):
+        if "admin" not in user.get("roles", []):
+            logging_client.warning(f"User with id: {user.get('id')} has not admin rights")
+            raise HTTPException(status_code=403, detail="Admin role required")
+        logging_client.info(f"User with id: {user.get('id')} has admin rights")
+        return True
+    return check_admin

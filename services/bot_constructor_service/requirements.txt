@@ -1,2 +1,2 @@
-# services\bot_constructor_service\requirements.txt
+# Main requirements file that references environment-specific requirements
 -r requirements/base.txt

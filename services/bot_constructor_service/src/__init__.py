@@ -1,4 +1,3 @@
-# services\bot_constructor_service\src\__init__.py
 """
 Initialization module for the Bot Constructor microservice.
 
@@ -10,5 +9,8 @@ __author__ = "Your Name or Team"
 
 # Import main components to simplify access
 from .app import app
+from .config import settings
+from .db.database import init_db, close_engine, check_db_connection
+from .integrations.redis_client import redis_client
 
-__all__ = ["app"]
+__all__ = ["app", "settings", "init_db", "close_engine", "check_db_connection", "redis_client"]

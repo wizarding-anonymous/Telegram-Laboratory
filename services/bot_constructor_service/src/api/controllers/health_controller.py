@@ -1,4 +1,3 @@
-# services\bot_constructor_service\src\api\controllers\health_controller.py
 """Health check controller for monitoring service status."""
 
 from typing import Dict, Any

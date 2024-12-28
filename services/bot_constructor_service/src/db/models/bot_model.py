@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, func, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, func, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from src.db.database import Base
@@ -18,7 +18,7 @@ class Bot(Base):
     version = Column(String(50), nullable=True, default="1.0.0")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    logic = Column(Text, nullable=True)
+    logic = Column(JSON, nullable=True)  # Using JSON type to store bot logic
 
     def __repr__(self):
         return f"<Bot(id={self.id}, name='{self.name}')>"

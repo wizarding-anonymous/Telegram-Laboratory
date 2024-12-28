@@ -1,5 +1,3 @@
-# services/bot_constructor_service/src/db/models/__init__.py
-
 from .bot_model import Bot
 from .block_model import Block
 from .connection_model import Connection

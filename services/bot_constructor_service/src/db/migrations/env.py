@@ -1,5 +1,3 @@
-# src/db/migrations/env.py
-
 from logging.config import fileConfig
 import os
 from sqlalchemy import engine_from_config, pool
@@ -7,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from alembic import context
 from dotenv import load_dotenv
 from src.db.models import Base  # Импортируйте модели
+from src.config import settings
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
@@ -15,7 +14,9 @@ load_dotenv()
 config = context.config
 
 # Получаем строку подключения к базе данных из переменной окружения
-DATABASE_URL = os.getenv("DATABASE_URL")
+# DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = settings.full_database_url
+
 if DATABASE_URL:
     # Устанавливаем строку подключения в конфигурацию Alembic
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
@@ -26,6 +27,7 @@ if config.config_file_name is not None:
 
 # Мета-данные для поддержки автогенерации миграций
 target_metadata = Base.metadata
+
 
 def run_migrations_offline():
     """Запускаем миграции в оффлайн-режиме."""
@@ -39,6 +41,7 @@ def run_migrations_offline():
 
     with context.begin_transaction():
         context.run_migrations()
+
 
 def run_migrations_online():
     """Запускаем миграции в онлайн-режиме."""
@@ -58,6 +61,7 @@ def run_migrations_online():
 
         with context.begin_transaction():
             context.run_migrations()
+
 
 # Выполняем миграции в зависимости от режима
 if context.is_offline_mode():

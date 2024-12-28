@@ -1,4 +1,3 @@
-# services\bot_constructor_service\src\api\schemas\response_schema.py
 from pydantic import BaseModel, Field, validator
 from typing import Any, List, Optional
 from src.core.utils.validators import validate_status  # Импорт валидатора
