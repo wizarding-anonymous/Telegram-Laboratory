@@ -1,10 +1,16 @@
 import httpx
 from loguru import logger
 import os
+from typing import Optional, Dict, Any, List
+from abc import ABC, abstractmethod
+from fastapi import HTTPException
 
-class TelegramClient:
+from src.core.utils.exceptions import TelegramAPIException
+
+
+class TelegramClient(ABC):
     """
-    Client for interacting with the Telegram Bot API.
+    Abstract base class for interacting with the Telegram Bot API.
     """
 
     def __init__(self, bot_token: str = None):
@@ -18,103 +24,125 @@ class TelegramClient:
         if not self.bot_token:
             raise ValueError("Telegram bot token is required")
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
-        logger.info("TelegramClient initialized")
+        logger.info(f"{self.__class__.__name__} initialized")
 
-    async def send_message(self, chat_id: int, text: str, parse_mode: str = "Markdown") -> dict:
+    async def validate_token(self, token: str) -> bool:
+         """
+         Validate telegram token.
+         Args:
+             token(str): Token for telegram bot.
         """
-        Send a message to a Telegram chat.
+         url = f"https://api.telegram.org/bot{token}/getMe"
+         async with httpx.AsyncClient() as client:
+             try:
+                 response = await client.get(url)
+                 response.raise_for_status()
+                 if response.status_code == 200:
+                     logger.info("Telegram token is valid")
+                     return True
+                 else:
+                      logger.error(f"Telegram token is invalid, status_code: {response.status_code}")
+                      return False
+             except httpx.HTTPError as e:
+                 logger.error(f"Telegram token is invalid, exception: {e}")
+                 raise TelegramAPIException(detail=f"Telegram token is invalid: {e}")
 
+
+    async def make_api_request(self, url: str, method: str, json: Optional[dict] = None, params: Optional[dict] = None) -> dict:
+        """
+        Makes a request to Telegram API using a specific URL and method.
         Args:
-            chat_id (int): Chat ID to send the message to.
-            text (str): Message text.
-            parse_mode (str): Formatting style for the message (e.g., "Markdown", "HTML").
-
+           url (str): URL of the API endpoint.
+           method (str): HTTP method (GET, POST, etc.).
+           json (Optional[dict]): JSON payload if required.
+           params (Optional[dict]): Query parameters if required.
         Returns:
             dict: Response from the Telegram API.
         """
-        url = f"{self.base_url}/sendMessage"
-        payload = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": parse_mode,
-        }
         async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload)
-            if response.status_code != 200:
-                logger.error(f"Failed to send message: {response.text}")
-                raise httpx.HTTPStatusError(
-                    f"Error sending message: {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
-            logger.info(f"Message sent to chat {chat_id}: {text}")
-            return response.json()
+            try:
+                response = await client.request(method=method, url=url, json=json, params=params)
+                response.raise_for_status()
+                logger.info(f"Telegram API request successful to {url}")
+                return response.json()
+            except httpx.HTTPError as e:
+                logger.error(f"Telegram API request failed to {url}: {e}")
+                raise TelegramAPIException(detail=f"Telegram API request failed to {url}: {e}")
+            except Exception as e:
+                 logger.error(f"Telegram API request failed to {url}: {e}")
+                 raise TelegramAPIException(detail=f"Telegram API request failed to {url}: {e}")
 
+    @abstractmethod
+    async def send_message(self, chat_id: int, text: str, parse_mode: str = "Markdown", reply_markup: Optional[Any] = None, inline_keyboard: Optional[Any] = None) -> dict:
+        """Abstract method for sending a message to a Telegram chat."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def send_photo(self, chat_id: int, photo_url: str, caption: Optional[str] = None) -> dict:
+        """Abstract method for sending a photo to a Telegram chat."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def send_video(self, chat_id: int, video_url: str, caption: Optional[str] = None) -> dict:
+        """Abstract method for sending a video to a Telegram chat."""
+        raise NotImplementedError
+        
+    @abstractmethod
+    async def send_audio(self, chat_id: int, audio_url: str, caption: Optional[str] = None) -> dict:
+        """Abstract method for sending audio to Telegram chat"""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def send_document(self, chat_id: int, document_url: str, caption: Optional[str] = None) -> dict:
+        """Abstract method for sending a document to Telegram chat"""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def send_location(self, chat_id: int, latitude: float, longitude: float) -> dict:
+         """Abstract method for sending location to a Telegram chat."""
+         raise NotImplementedError
+
+    @abstractmethod
+    async def send_sticker(self, chat_id: int, sticker_url: str) -> dict:
+        """Abstract method for sending a sticker to a Telegram chat."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def send_contact(self, chat_id: int, phone_number: str, first_name: str, last_name: str = "") -> dict:
+        """Abstract method for sending a contact to a Telegram chat."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def send_venue(self, chat_id: int, latitude: float, longitude: float, title: str, address: str) -> dict:
+        """Abstract method for sending a venue to a Telegram chat."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def send_game(self, chat_id: int, game_short_name: str) -> dict:
+        """Abstract method for sending a game to a Telegram chat."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def send_poll(self, chat_id: int, question: str, options: List[str]) -> dict:
+        """Abstract method for sending a poll to a Telegram chat."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def set_webhook(self, webhook_url: str) -> dict:
-        """
-        Set a webhook for the Telegram bot.
+        """Abstract method for setting a webhook to a Telegram bot."""
+        raise NotImplementedError
 
-        Args:
-            webhook_url (str): The URL to receive Telegram updates.
-
-        Returns:
-            dict: Response from the Telegram API.
-        """
-        url = f"{self.base_url}/setWebhook"
-        payload = {"url": webhook_url}
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload)
-            if response.status_code != 200:
-                logger.error(f"Failed to set webhook: {response.text}")
-                raise httpx.HTTPStatusError(
-                    f"Error setting webhook: {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
-            logger.info(f"Webhook set: {webhook_url}")
-            return response.json()
-
+    @abstractmethod
     async def delete_webhook(self) -> dict:
-        """
-        Delete the webhook for the Telegram bot.
+        """Abstract method for deleting a webhook from a Telegram bot."""
+        raise NotImplementedError
 
-        Returns:
-            dict: Response from the Telegram API.
-        """
-        url = f"{self.base_url}/deleteWebhook"
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url)
-            if response.status_code != 200:
-                logger.error(f"Failed to delete webhook: {response.text}")
-                raise httpx.HTTPStatusError(
-                    f"Error deleting webhook: {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
-            logger.info("Webhook deleted successfully")
-            return response.json()
-
+    @abstractmethod
     async def get_updates(self, offset: int = 0, timeout: int = 10) -> dict:
-        """
-        Fetch updates from the Telegram API.
+        """Abstract method for fetching updates from a Telegram bot."""
+        raise NotImplementedError
 
-        Args:
-            offset (int): Identifier of the first update to return.
-            timeout (int): Timeout in seconds for long polling.
-
-        Returns:
-            dict: Response from the Telegram API.
-        """
-        url = f"{self.base_url}/getUpdates"
-        params = {"offset": offset, "timeout": timeout}
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params)
-            if response.status_code != 200:
-                logger.error(f"Failed to get updates: {response.text}")
-                raise httpx.HTTPStatusError(
-                    f"Error getting updates: {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
-            logger.info("Updates fetched successfully")
-            return response.json()
+    @abstractmethod
+    async def handle_message(self, message: dict) -> None:
+        """Abstract method for handling incoming messages"""
+        raise NotImplementedError

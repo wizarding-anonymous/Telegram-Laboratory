@@ -13,6 +13,8 @@ class BotBase(BaseModel):
         "draft", description="Status of the bot (draft, active, inactive)"
     )
     version: Optional[str] = Field("1.0.0", description="Version of the bot")
+    token: str = Field(..., description="Telegram bot token")
+    library: str = Field(..., description="Library for the bot (telegram_api, aiogram, telebot)")
 
 
 class BotCreate(BotBase):
@@ -20,9 +22,19 @@ class BotCreate(BotBase):
     template_id: Optional[int] = Field(None, description="ID of the template to use")
 
 
-class BotUpdate(BotBase):
+class BotUpdate(BaseModel):
     """Schema for updating an existing bot."""
-    pass
+    name: Optional[str] = Field(None, min_length=3, max_length=255, description="Name of the bot")
+    description: Optional[str] = Field(
+        None, max_length=1000, description="Description of the bot"
+    )
+    status: Optional[str] = Field(
+        "draft", description="Status of the bot (draft, active, inactive)"
+    )
+    version: Optional[str] = Field(None, description="Version of the bot")
+    token: Optional[str] = Field(None, description="Telegram bot token")
+    library: Optional[str] = Field(None, description="Library for the bot (telegram_api, aiogram, telebot)")
+    
 
 
 class BotResponse(BotBase):

@@ -4,13 +4,14 @@ from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional
 
 import httpx
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 from jinja2 import BaseLoader, Environment
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.utils import handle_exceptions
+from src.core.utils.exceptions import BlockNotFoundException
 from src.core.utils.validators import (
     validate_block_type,
     validate_api_request_data,
@@ -24,10 +25,10 @@ from src.core.utils.validators import (
 )
 from src.db.database import get_session
 from src.db.repositories import BlockRepository, BotRepository
-from src.integrations.auth_service import AuthService
+from src.integrations.auth_service import AuthService, get_current_user
 from src.integrations.logging_client import LoggingClient
 from src.integrations.redis_client import redis_client
-from src.integrations.telegram.telegram_api import TelegramAPI
+from src.integrations.telegram import TelegramClient
 from dataclasses import dataclass, field
 
 
@@ -36,6 +37,7 @@ class Block:
     id: int
     type: str
     content: Optional[Dict[str, Any]] = field(default_factory=dict)
+    connections: Optional[List[int]] = field(default_factory=list)
 
 
 class LogicManager:
@@ -45,14 +47,14 @@ class LogicManager:
 
     def __init__(
         self,
-        block_repository: BlockRepository,
-        bot_repository: BotRepository,
-        telegram_api: TelegramAPI,
-        auth_service: AuthService,
+        block_repository: BlockRepository = Depends(),
+        bot_repository: BotRepository = Depends(),
+        telegram_client: TelegramClient = Depends(),
+        auth_service: AuthService = Depends(),
     ):
         self.block_repository = block_repository
         self.bot_repository = bot_repository
-        self.telegram_api = telegram_api
+        self.telegram_client = telegram_client
         self.auth_service = auth_service
         self.template_env = Environment(loader=BaseLoader())
         self.logging_client = LoggingClient(service_name="bot_constructor")
@@ -103,7 +105,7 @@ class LogicManager:
 
     @handle_exceptions
     async def execute_bot_logic(
-        self, bot_id: int, chat_id: int, user_message: str
+        self, bot_id: int, chat_id: int, user_message: str, user: dict = Depends(get_current_user)
     ) -> None:
         """Executes bot logic based on provided bot_id and chat_id."""
         self.logging_client.info(
@@ -111,7 +113,7 @@ class LogicManager:
         )
 
         # Get the bot and its logic
-        bot = await self.bot_repository.get(bot_id)
+        bot = await self.bot_repository.get_by_id(bot_id)
         if not bot or not bot.logic:
             self.logging_client.warning(
                 f"Bot or bot logic was not found for bot_id: {bot_id}"
@@ -119,6 +121,11 @@ class LogicManager:
             raise HTTPException(
                 status_code=404, detail="Bot or bot logic was not found"
             )
+        
+        if "admin" not in user.get("roles", []):
+           self.logging_client.warning(f"User: {user['id']} does not have permission to execute bot logic")
+           raise HTTPException(status_code=403, detail="Permission denied")
+        
 
         bot_logic = bot.logic
 
@@ -132,18 +139,16 @@ class LogicManager:
                 status_code=404, detail="Start block id not found for bot"
             )
 
-        start_block = await self.block_repository.get(start_block_id)
+        start_block = await self.block_repository.get_by_id(start_block_id)
         if not start_block:
             self.logging_client.warning(
                 f"Start block with id: {start_block_id} not found for bot_id: {bot_id}"
             )
-            raise HTTPException(
-                status_code=404,
-                detail=f"Start block with id: {start_block_id} not found for bot",
-            )
+            raise BlockNotFoundException(block_id=start_block_id)
 
         await self._process_block(
-            Block(**start_block.dict()), chat_id, user_message, bot_logic
+            Block(**start_block.model_dump()), chat_id, user_message, bot_logic,
+             variables={}
         )
 
         self.logging_client.info(
@@ -189,7 +194,7 @@ class LogicManager:
             await asyncio.gather(
                 *[
                     self._process_block(
-                        Block(**next_block.dict()),
+                        next_block,
                         chat_id,
                         user_message,
                         bot_logic,
@@ -214,7 +219,7 @@ class LogicManager:
     ):
         """Safely executes a handler with exception handling."""
         try:
-            await handler(content, chat_id, user_message, bot_logic, variables)
+            await handler(content, chat_id, user_message, bot_logic, variables, block)
         except HTTPException as he:
             self.logging_client.error(
                 f"HTTPException in block {block.id}: {he.detail}"
@@ -239,15 +244,15 @@ class LogicManager:
 
         connections = bot_logic.get("connections", [])
         next_block_ids = [
-            connection["target_block_id"]
+            connection
             for connection in connections
-            if connection["source_block_id"] == block_id
+            if connection == block_id
         ]
 
         connected_blocks = []
         if next_block_ids:
             blocks = await self.block_repository.list_by_ids(next_block_ids)
-            connected_blocks = [Block(**block.dict()) for block in blocks]
+            connected_blocks = [Block(**block.model_dump()) for block in blocks]
 
         return connected_blocks
 
@@ -266,7 +271,7 @@ class LogicManager:
         inline_keyboard: Optional[Any] = None,
     ) -> None:
         """Sends a message to the specified chat."""
-        await self.telegram_api.send_message(
+        await self.telegram_client.send_message(
             chat_id, message, reply_markup=reply_markup, inline_keyboard=inline_keyboard
         )
 
@@ -278,7 +283,7 @@ class LogicManager:
         media_type: str = "photo",
     ) -> None:
         """Sends media to the specified chat."""
-        send_method = getattr(self.telegram_api, f"send_{media_type}", None)
+        send_method = getattr(self.telegram_client, f"send_{media_type}", None)
         if send_method:
             await send_method(chat_id, media_url, caption=caption)
         else:
@@ -293,6 +298,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles a text message block."""
         self.logging_client.info(f"Handling text message for chat_id: {chat_id}")
@@ -316,6 +322,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles sending a text message block."""
         self.logging_client.info(f"Handling send text block for chat_id: {chat_id}")
@@ -334,6 +341,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles keyboard block."""
         self.logging_client.info(f"Handling keyboard block for chat_id: {chat_id}")
@@ -371,17 +379,18 @@ class LogicManager:
 
     async def _handle_if_condition(
         self,
-        block: Block,
+        content: Dict[str, Any],
         chat_id: int,
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles if condition block."""
         self.logging_client.info(
             f"Handling if condition block: {block.id} for chat_id: {chat_id}"
         )
-        condition_template = block.content.get("condition")
+        condition_template = content.get("condition")
         if condition_template:
             condition = self.get_template(condition_template).render(variables)
             if condition in user_message:
@@ -396,20 +405,21 @@ class LogicManager:
                 # Do nothing, skip next blocks as the condition is not met.
 
     async def _handle_loop_block(
-        self,
-        block: Block,
+         self,
+        content: Dict[str, Any],
         chat_id: int,
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles loop block."""
         self.logging_client.info(
             f"Handling loop block: {block.id} for chat_id: {chat_id}"
         )
 
-        loop_type = block.content.get("loop_type")
-        loop_count = block.content.get("count", 0)
+        loop_type = content.get("loop_type")
+        loop_count = content.get("count", 0)
         if loop_type == "for":
             try:
                 count = int(self.get_template(str(loop_count)).render(variables))
@@ -440,7 +450,7 @@ class LogicManager:
                     f"Can't convert {loop_count} to int"
                 )
         elif loop_type == "while":
-            condition_template = block.content.get("condition")
+            condition_template = content.get("condition")
             if condition_template:
                 condition = self.get_template(condition_template).render(variables)
                 while condition in user_message:
@@ -472,6 +482,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles API request block."""
         self.logging_client.info(f"Handling API request block for chat_id: {chat_id}")
@@ -516,10 +527,10 @@ class LogicManager:
 
             response_block_id = content.get("response_block_id")
             if response_block_id:
-                response_block = await self.block_repository.get(response_block_id)
+                response_block = await self.block_repository.get_by_id(response_block_id)
                 if response_block:
                     await self._process_block(
-                        Block(**response_block.dict()),
+                        Block(**response_block.model_dump()),
                         chat_id,
                         str(response_data),
                         bot_logic,
@@ -541,6 +552,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles database request block."""
         self.logging_client.info(f"Handling database request block for chat_id: {chat_id}")
@@ -571,10 +583,10 @@ class LogicManager:
                     response_block_id = content.get("response_block_id")
                     if response_block_id:
                         response_data = {"result": formatted_result}
-                        response_block = await self.block_repository.get(response_block_id)
+                        response_block = await self.block_repository.get_by_id(response_block_id)
                         if response_block:
                             await self._process_block(
-                                Block(**response_block.dict()),
+                                Block(**response_block.model_dump()),
                                 chat_id,
                                 str(response_data),
                                 bot_logic,
@@ -596,6 +608,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles webhook block."""
         self.logging_client.info(f"Handling webhook block for chat_id: {chat_id}")
@@ -607,11 +620,12 @@ class LogicManager:
         url = self.get_template(url_template).render(variables)
         self.logging_client.info(f"Sending webhook to url: {url}")
         try:
-            response = await self.telegram_api.make_api_request(
+            response = await self.http_client.request(
                 url=url,
                 method="POST",
                 json={"chat_id": chat_id},
             )
+            response.raise_for_status()
             self.logging_client.info(f"Webhook was sent successfully, response: {response}")
         except Exception as e:
             self.logging_client.error(f"Webhook was not sent, error: {e}")
@@ -623,6 +637,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles callback block."""
         self.logging_client.info(f"Handling callback block for chat_id: {chat_id}")
@@ -654,9 +669,10 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles variable block."""
-        self.logging_client.info("Handling variable block")
+        self.logging_client.info(f"Handling variable block {block.id}")
         validate_variable_data(content)
         action = content.get('action')
         variable_name = content.get('name')
@@ -719,6 +735,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles various media message blocks."""
         media_type = content.get("type")  # e.g., 'photo', 'video', etc.
@@ -741,6 +758,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles a location message block."""
         self.logging_client.info(f"Handling location message for chat_id: {chat_id}")
@@ -760,6 +778,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles a contact message block."""
         self.logging_client.info(f"Handling contact message for chat_id: {chat_id}")
@@ -777,6 +796,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles a venue message block."""
         self.logging_client.info(f"Handling venue message for chat_id: {chat_id}")
@@ -794,6 +814,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles a game message block."""
         self.logging_client.info(f"Handling game message for chat_id: {chat_id}")
@@ -811,6 +832,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles a poll message block."""
         self.logging_client.info(f"Handling poll message for chat_id: {chat_id}")
@@ -824,7 +846,7 @@ class LogicManager:
             self.logging_client.info(
                 f"Sending poll with question: {question} and options: {parsed_options} to chat_id: {chat_id}"
             )
-            await self.telegram_api.send_poll(
+            await self.telegram_client.send_poll(
                 chat_id, question, parsed_options
             )
 
@@ -835,6 +857,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles sending various media types."""
         media_type = content.get("media_type", "photo")
@@ -855,6 +878,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles sending a location message block."""
         self.logging_client.info(f"Handling send location block for chat_id: {chat_id}")
@@ -866,7 +890,7 @@ class LogicManager:
             self.logging_client.info(
                 f"Sending location latitude: {latitude} and longitude: {longitude} to chat_id: {chat_id}"
             )
-            await self.telegram_api.send_location(
+            await self.telegram_client.send_location(
                 chat_id, float(latitude), float(longitude)
             )
 
@@ -877,6 +901,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles sending a contact message block."""
         self.logging_client.info(f"Handling send contact block for chat_id: {chat_id}")
@@ -890,7 +915,7 @@ class LogicManager:
             self.logging_client.info(
                 f"Sending contact with number: {phone_number} to chat_id: {chat_id}"
             )
-            await self.telegram_api.send_contact(
+            await self.telegram_client.send_contact(
                 chat_id, phone_number, first_name, last_name=last_name
             )
 
@@ -901,6 +926,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles sending a venue message block."""
         self.logging_client.info(f"Handling send venue block for chat_id: {chat_id}")
@@ -916,7 +942,7 @@ class LogicManager:
             self.logging_client.info(
                 f"Sending venue with address: {address}, latitude: {latitude} and longitude: {longitude} to chat_id: {chat_id}"
             )
-            await self.telegram_api.send_venue(
+            await self.telegram_client.send_venue(
                 chat_id, float(latitude), float(longitude), title, address
             )
 
@@ -927,6 +953,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles sending a game message block."""
         self.logging_client.info(f"Handling send game block for chat_id: {chat_id}")
@@ -936,7 +963,7 @@ class LogicManager:
             self.logging_client.info(
                 f"Sending game with short name: {game_short_name} to chat_id: {chat_id}"
             )
-            await self.telegram_api.send_game(chat_id, game_short_name)
+            await self.telegram_client.send_game(chat_id, game_short_name)
 
     async def _handle_send_poll(
         self,
@@ -945,6 +972,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles sending a poll message block."""
         self.logging_client.info(f"Handling send poll block for chat_id: {chat_id}")
@@ -958,17 +986,18 @@ class LogicManager:
             self.logging_client.info(
                 f"Sending poll with question: {question} and options: {parsed_options} to chat_id: {chat_id}"
             )
-            await self.telegram_api.send_poll(
+            await self.telegram_client.send_poll(
                 chat_id, question, parsed_options
             )
 
     async def _handle_try_catch_block(
         self,
-        block: Block,
+        content: Dict[str, Any],
         chat_id: int,
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles try-catch block."""
         self.logging_client.info(
@@ -981,11 +1010,11 @@ class LogicManager:
                     await self._process_block(next_block, chat_id, user_message, bot_logic, variables)
         except Exception as e:
             self.logging_client.error(f"An exception occurred in try block: {e}")
-            catch_block_id = block.content.get("catch_block_id")
+            catch_block_id = content.get("catch_block_id")
             if catch_block_id:
-                catch_block = await self.block_repository.get(catch_block_id)
+                catch_block = await self.block_repository.get_by_id(catch_block_id)
                 if catch_block:
-                    await self._process_block(Block(**catch_block.dict()), chat_id, user_message, bot_logic, variables)
+                    await self._process_block(Block(**catch_block.model_dump()), chat_id, user_message, bot_logic, variables)
                 else:
                     self.logging_client.warning(f"Catch block with id: {catch_block_id} was not found")
             else:
@@ -999,6 +1028,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles raise error block."""
         self.logging_client.info(f"Handling raise error block")
@@ -1017,14 +1047,15 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles handle exception block."""
         self.logging_client.info(f"Handling handle exception block")
         exception_block_id = content.get("exception_block_id")
         if exception_block_id:
-            exception_block = await self.block_repository.get(exception_block_id)
+            exception_block = await self.block_repository.get_by_id(exception_block_id)
             if exception_block:
-                await self._process_block(Block(**exception_block.dict()), chat_id, user_message, bot_logic, variables)
+                await self._process_block(Block(**exception_block.model_dump()), chat_id, user_message, bot_logic, variables)
             else:
                 self.logging_client.warning(f"Exception block with id: {exception_block_id} was not found")
         else:
@@ -1038,6 +1069,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles log message block."""
         self.logging_client.info(f"Handling log message block for chat_id: {chat_id}")
@@ -1069,6 +1101,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles timer block."""
         self.logging_client.info(f"Handling timer block for chat_id: {chat_id}")
@@ -1104,19 +1137,20 @@ class LogicManager:
 
     async def _handle_state_machine_block(
         self,
-        block: Block,
+        content: Dict[str, Any],
         chat_id: int,
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+         block: Block,
     ) -> None:
         """Handles state machine block."""
         self.logging_client.info(
             f"Handling state machine block: {block.id} for chat_id: {chat_id}"
         )
-        validate_state_machine_data(block.content)
-        state_template = block.content.get("state")
-        transitions = block.content.get("transitions", [])
+        validate_state_machine_data(content)
+        state_template = content.get("state")
+        transitions = content.get("transitions", [])
         if state_template and transitions:
             state = self.get_template(state_template).render(variables)
             self.logging_client.info(f"Current state: {state}")
@@ -1130,9 +1164,9 @@ class LogicManager:
                             f"Transition triggered by: {trigger}. Moving to state: {target_state}"
                         )
                         # Здесь можно сохранить состояние для последующего использования
-                        next_block = await self.block_repository.get(target_state)
+                        next_block = await self.block_repository.get_by_id(target_state)
                         if next_block:
-                            await self._process_block(Block(**next_block.dict()), chat_id, user_message, bot_logic, variables)
+                            await self._process_block(Block(**next_block.model_dump()), chat_id, user_message, bot_logic, variables)
                         else:
                             self.logging_client.warning(
                                 f"Next block for state: {target_state} was not found"
@@ -1151,6 +1185,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles custom filter block."""
         self.logging_client.info(f"Handling custom filter block for chat_id: {chat_id}")
@@ -1191,6 +1226,7 @@ class LogicManager:
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
+        block: Block,
     ) -> None:
         """Handles rate limiting block."""
         self.logging_client.info(f"Handling rate limiting block for chat_id: {chat_id}")
@@ -1201,7 +1237,7 @@ class LogicManager:
             try:
                 limit = int(self.get_template(str(limit_template)).render(variables))
                 interval = int(self.get_template(str(interval_template)).render(variables))
-                cache_key = f"rate_limit:{chat_id}:{content.get('block_id', 'unknown')}"
+                cache_key = f"rate_limit:{chat_id}:{block.id}"
                 current_count = await redis_client.get(cache_key)
                 current_count = int(current_count) if current_count else 0
 
@@ -1210,7 +1246,7 @@ class LogicManager:
                     self.logging_client.info(
                         f"Rate limit passed, current count: {current_count + 1}"
                     )
-                    next_blocks = await self._get_next_blocks(content.get("block_id"), bot_logic)
+                    next_blocks = await self._get_next_blocks(block.id, bot_logic)
                     if next_blocks:
                         await asyncio.gather(
                             *[
@@ -1236,50 +1272,20 @@ class LogicManager:
             self.logging_client.warning("Rate limit or interval was not defined")
             return
 
+    async def initialize_block(self, block: Any) -> None:
+       """Initialize block in logic manager"""
+       self.logging_client.info(f"Initializing block {block.id} of type {block.type}")
 
-def validate_block_type(block_type: str) -> None:
-    """Validates block type."""
-    allowed_types = [
-        "text_message",
-        "send_text",
-        "keyboard",
-        "if_condition",
-        "loop",
-        "api_request",
-        "database",
-        "webhook",
-        "callback",
-        "variable",
-        "photo_message",
-        "video_message",
-        "audio_message",
-        "document_message",
-        "location_message",
-        "sticker_message",
-        "contact_message",
-        "venue_message",
-        "game_message",
-        "poll_message",
-        "send_photo",
-        "send_video",
-        "send_audio",
-        "send_document",
-        "send_location",
-        "send_sticker",
-        "send_contact",
-        "send_venue",
-        "send_game",
-        "send_poll",
-        "try_catch",
-        "raise_error",
-        "handle_exception",
-        "log_message",
-        "timer",
-        "state_machine",
-        "custom_filter",
-        "rate_limiting",
-    ]
-    if block_type not in allowed_types:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid block type: {block_type}"
-        )
+    async def update_block(self, block: Any) -> None:
+        """Updates block in logic manager"""
+        self.logging_client.info(f"Updating block {block.id} of type {block.type}")
+
+    async def remove_block(self, block_id: int) -> None:
+        """Removes block from logic manager"""
+        self.logging_client.info(f"Removing block {block_id}")
+
+    async def connect_blocks(self, source_block_id: int, target_block_id: int) -> None:
+       """Connect blocks in logic manager"""
+       self.logging_client.info(
+           f"Connecting blocks {source_block_id} and {target_block_id} in logic manager"
+       )

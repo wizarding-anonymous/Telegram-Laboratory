@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     DATABASE_HOST: str = Field("localhost", env="DATABASE_HOST")
     DATABASE_PORT: int = Field(5432, env="DATABASE_PORT")
     DATABASE_NAME: str = Field("bot_constructor", env="DATABASE_NAME")
-    DATABASE_URL: str = Field(..., env="DATABASE_URL")  # Full database URL
+    DATABASE_URL: Optional[str] = Field(None, env="DATABASE_URL")  # Full database URL
 
     @property
     def full_database_url(self) -> str:
@@ -62,6 +62,9 @@ class Settings(BaseSettings):
 
     # Telegram API settings
     TELEGRAM_BOT_TOKEN: str = Field(..., env="TELEGRAM_BOT_TOKEN")
+    
+    #Telegram library
+    TELEGRAM_BOT_LIBRARY: str = Field("telegram_api", env="TELEGRAM_BOT_LIBRARY")
 
     # Logging settings
     LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
@@ -97,3 +100,4 @@ if __name__ == "__main__":
     print("Allowed Origins:", settings.ALLOWED_ORIGINS)
     print("Data Storage Service URL:", settings.DATA_STORAGE_SERVICE_URL)
     print("Logging Service URL:", settings.LOGGING_SERVICE_URL)
+    print("Telegram bot library:", settings.TELEGRAM_BOT_LIBRARY)

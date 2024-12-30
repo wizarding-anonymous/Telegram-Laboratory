@@ -7,6 +7,7 @@ import json
 from src.config import settings
 from src.core.utils.helpers import handle_exceptions
 from src.integrations.logging_client import LoggingClient
+from src.core.utils.exceptions import TelegramAPIException
 
 logging_client = LoggingClient(service_name="bot_constructor")
 
@@ -35,27 +36,27 @@ class TelegramAPI:
                 try:
                     error_details = exc.response.json()
                     logger.error(f"Telegram API error: {error_details}")
-                    raise HTTPException(
-                        status_code=exc.response.status_code, detail=f"Telegram API Error: {error_details.get('description') or error_details}"
+                    raise TelegramAPIException(
+                        detail=f"Telegram API Error: {error_details.get('description') or error_details}"
                     ) from exc
                 except json.JSONDecodeError:
                     logger.error(f"Invalid response from Telegram API: {exc.response.text}")
                     raise HTTPException(
                         status_code=exc.response.status_code, detail=f"Telegram API Error: Invalid response"
                     ) from exc
-            raise HTTPException(
-                status_code=500, detail=f"Telegram API Error: {exc}"
+            raise TelegramAPIException(
+                detail=f"Telegram API Error: {exc}"
             ) from exc
         except Exception as exc:
             logger.exception(f"Unexpected error: {exc}")
-            raise HTTPException(status_code=500, detail="Internal server error") from exc
+            raise TelegramAPIException(detail="Internal server error") from exc
 
     @handle_exceptions
-    async def send_message(self, chat_id: int, text: str, reply_markup: Optional[List[List[Dict[str, Any]]]] = None, inline_keyboard: Optional[List[List[Dict[str, Any]]]] = None) -> Any:
+    async def send_message(self, chat_id: int, text: str, reply_markup: Optional[List[List[Dict[str, Any]]]] = None, inline_keyboard: Optional[List[List[Dict[str, Any]]]] = None, parse_mode: str = "HTML") -> Any:
         """Sends a text message to the specified chat."""
         logger.info(f"Sending text message to chat_id: {chat_id}")
 
-        data = {"chat_id": chat_id, "text": text}
+        data = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
         if reply_markup:
             data["reply_markup"] = {"keyboard": reply_markup, "resize_keyboard": True}
         if inline_keyboard:

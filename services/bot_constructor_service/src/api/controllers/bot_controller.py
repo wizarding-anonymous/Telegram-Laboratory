@@ -4,173 +4,177 @@ from fastapi import HTTPException, Depends, Query
 from loguru import logger
 
 from src.api.schemas import (
-    BlockCreate,
-    BlockUpdate,
-    BlockResponse,
-    BlockConnection,
+    BotCreate,
+    BotUpdate,
+    BotResponse,
     SuccessResponse,
     ErrorResponse,
     PaginatedResponse,
-    ListResponse,
 )
 from src.core.utils import (
     handle_exceptions,
-    validate_block_type,
     validate_bot_id,
-    validate_block_ids,
-    validate_connections,
-    validate_content,
+    validate_bot_name,
+    validate_version,
 )
-from src.db.repositories import BlockRepository
+from src.db.repositories import BotRepository
 from src.integrations.auth_service import get_current_user
 from src.integrations.logging_client import LoggingClient
+from src.integrations.telegram import TelegramClient
+from src.core.utils.exceptions import BotNotFoundException, InvalidTokenException, InvalidBlockTypeException
 
 
 logging_client = LoggingClient(service_name="bot_constructor")
 
-class BlockController:
+
+class BotController:
     """
-    Controller for managing blocks.
+    Controller for managing bots.
     """
 
     def __init__(
         self,
-        block_repository: BlockRepository = Depends(),
+        bot_repository: BotRepository = Depends(),
+         telegram_client: TelegramClient = Depends()
     ):
-        self.block_repository = block_repository
+        self.bot_repository = bot_repository
+        self.telegram_client = telegram_client
 
     @handle_exceptions
-    async def create_block(
-        self, block_create: BlockCreate, user: dict = Depends(get_current_user)
-    ) -> BlockResponse:
-        """Creates a new block."""
-        logging_client.info(f"Creating block of type: {block_create.type}")
+    async def create_bot(
+        self, bot_create: BotCreate, user: dict = Depends(get_current_user)
+    ) -> BotResponse:
+        """Creates a new bot."""
+        logging_client.info(f"Creating bot with name: {bot_create.name}")
 
-        validate_block_type(block_create.type)
-        validate_bot_id(block_create.bot_id)
-        validate_content(block_create.content)
-        
+        validate_bot_name(bot_create.name)
+
         if "admin" not in user.get("roles", []):
-            logging_client.warning(f"User with id: {user['id']} does not have permission to create blocks")
+            logging_client.warning(
+                f"User with id: {user['id']} does not have permission to create bots"
+            )
             raise HTTPException(status_code=403, detail="Permission denied")
+        
+        #Validate telegram token
+        try:
+            self.telegram_client.validate_token(bot_create.token)
+        except Exception as e:
+           logging_client.error(f"Error when validate telegram token: {e}")
+           raise InvalidTokenException(detail=str(e))
+        
+        if bot_create.library not in ["telegram_api", "aiogram", "telebot"]:
+           logging_client.error(f"Invalid bot library: {bot_create.library}")
+           raise InvalidBlockTypeException(block_type=bot_create.library)
 
-        block = await self.block_repository.create(block_create.model_dump())
-        logging_client.info(f"Block with id: {block.id} created successfully")
-        return BlockResponse(**block.model_dump())
+
+        bot = await self.bot_repository.create(bot_create.model_dump(), user_id=user["id"])
+        logging_client.info(f"Bot with id: {bot.id} created successfully")
+        return BotResponse(**bot.model_dump())
 
     @handle_exceptions
-    async def get_block(
-        self, block_id: int, user: dict = Depends(get_current_user)
-    ) -> BlockResponse:
-        """Gets a specific block by id."""
-        logging_client.info(f"Getting block with id: {block_id}")
-        validate_block_ids([block_id])
-        block = await self.block_repository.get_by_id(block_id)
-        if not block:
-            logging_client.warning(f"Block with id: {block_id} not found")
-            raise HTTPException(status_code=404, detail="Block not found")
+    async def get_bot(
+        self, bot_id: int, user: dict = Depends(get_current_user)
+    ) -> BotResponse:
+        """Gets a specific bot by id."""
+        logging_client.info(f"Getting bot with id: {bot_id}")
+        validate_bot_id(bot_id)
+        bot = await self.bot_repository.get_by_id(bot_id)
+        if not bot:
+            logging_client.warning(f"Bot with id: {bot_id} not found")
+            raise BotNotFoundException(bot_id=bot_id)
 
         if "admin" not in user.get("roles", []):
-            logging_client.warning(f"User: {user['id']} does not have permission to get blocks")
+            logging_client.warning(
+                f"User: {user['id']} does not have permission to get bots"
+            )
             raise HTTPException(status_code=403, detail="Permission denied")
             
-        logging_client.info(f"Block with id: {block_id} retrieved successfully")
-        return BlockResponse(**block.model_dump())
+        logging_client.info(f"Bot with id: {bot_id} retrieved successfully")
+        return BotResponse(**bot.model_dump())
 
     @handle_exceptions
-    async def list_blocks(
+    async def list_bots(
         self,
-        bot_id: int,
         page: int = Query(1, ge=1),
         page_size: int = Query(10, ge=1, le=100),
         user: dict = Depends(get_current_user)
-    ) -> PaginatedResponse[BlockResponse]:
-        """Gets a list of blocks for the bot."""
-        logging_client.info(f"Listing blocks for bot id: {bot_id}")
-        validate_bot_id(bot_id)
-        blocks, total = await self.block_repository.list_paginated(
-            page=page, page_size=page_size, bot_id=bot_id
-        )
-
+    ) -> PaginatedResponse[BotResponse]:
+        """Gets a list of bots for the user."""
+        logging_client.info(f"Listing bots for user id: {user['id']}")
         if "admin" not in user.get("roles", []):
-            logging_client.warning(f"User: {user['id']} does not have permission to list blocks")
-            raise HTTPException(status_code=403, detail="Permission denied")
+             logging_client.warning(f"User: {user['id']} does not have permission to list bots")
+             raise HTTPException(status_code=403, detail="Permission denied")
 
-        block_list = [BlockResponse(**block.model_dump()) for block in blocks]
-        logging_client.info(f"Found {len(block_list)} blocks for bot id: {bot_id}")
+
+        bots, total = await self.bot_repository.list_paginated(
+            page=page, page_size=page_size, user_id=user["id"]
+        )
+        bot_list = [BotResponse(**bot.model_dump()) for bot in bots]
+        logging_client.info(f"Found {len(bot_list)} bots for user id: {user['id']}")
         return PaginatedResponse(
-            items=block_list, page=page, page_size=page_size, total=total
+            items=bot_list, page=page, page_size=page_size, total=total
         )
 
     @handle_exceptions
-    async def update_block(
-        self, block_id: int, block_update: BlockUpdate, user: dict = Depends(get_current_user)
-    ) -> BlockResponse:
-        """Updates an existing block."""
-        logging_client.info(f"Updating block with id: {block_id}")
-        validate_block_ids([block_id])
+    async def update_bot(
+        self, bot_id: int, bot_update: BotUpdate, user: dict = Depends(get_current_user)
+    ) -> BotResponse:
+        """Updates an existing bot."""
+        logging_client.info(f"Updating bot with id: {bot_id}")
+        validate_bot_id(bot_id)
         
-        block = await self.block_repository.get_by_id(block_id)
+        bot = await self.bot_repository.get_by_id(bot_id)
 
-        if not block:
-            logging_client.warning(f"Block with id: {block_id} not found")
-            raise HTTPException(status_code=404, detail="Block not found")
+        if not bot:
+            logging_client.warning(f"Bot with id: {bot_id} not found")
+            raise BotNotFoundException(bot_id=bot_id)
         
         if "admin" not in user.get("roles", []):
-            logging_client.warning(f"User: {user['id']} does not have permission to update blocks")
+            logging_client.warning(f"User: {user['id']} does not have permission to update bots")
             raise HTTPException(status_code=403, detail="Permission denied")
             
-        block_data = block_update.model_dump(exclude_unset=True)
+        bot_data = bot_update.model_dump(exclude_unset=True)
 
-        if block_data.get("type"):
-            validate_block_type(block_data.get("type"))
-        if block_data.get("content"):
-            validate_content(block_data.get("content"))
+        if bot_data.get("name"):
+          validate_bot_name(bot_data.get("name"))
+        if bot_data.get("version"):
+          validate_version(bot_data.get("version"))
+        
+         #Validate telegram token
+        if bot_data.get("token"):
+            try:
+                self.telegram_client.validate_token(bot_data.get("token"))
+            except Exception as e:
+                logging_client.error(f"Error when validate telegram token: {e}")
+                raise InvalidTokenException(detail=str(e))
+        
+        if bot_data.get("library"):
+           if bot_data.get("library") not in ["telegram_api", "aiogram", "telebot"]:
+              logging_client.error(f"Invalid bot library: {bot_data.get('library')}")
+              raise InvalidBlockTypeException(block_type=bot_data.get("library"))
 
-        updated_block = await self.block_repository.update(block_id, block_data)
-        logging_client.info(f"Block with id: {block_id} updated successfully")
-        return BlockResponse(**updated_block.model_dump())
+
+        updated_bot = await self.bot_repository.update(bot_id, bot_data)
+        logging_client.info(f"Bot with id: {bot_id} updated successfully")
+        return BotResponse(**updated_bot.model_dump())
 
     @handle_exceptions
-    async def delete_block(
-        self, block_id: int, user: dict = Depends(get_current_user)
+    async def delete_bot(
+        self, bot_id: int, user: dict = Depends(get_current_user)
     ) -> SuccessResponse:
-        """Deletes a block."""
-        logging_client.info(f"Deleting block with id: {block_id}")
-        validate_block_ids([block_id])
-        
-        block = await self.block_repository.get_by_id(block_id)
+        """Deletes a bot."""
+        logging_client.info(f"Deleting bot with id: {bot_id}")
+        validate_bot_id(bot_id)
 
-        if not block:
-            logging_client.warning(f"Block with id: {block_id} not found")
-            raise HTTPException(status_code=404, detail="Block not found")
-            
-        if "admin" not in user.get("roles", []):
-            logging_client.warning(f"User: {user['id']} does not have permission to delete blocks")
-            raise HTTPException(status_code=403, detail="Permission denied")
-
-        await self.block_repository.delete(block_id)
-        logging_client.info(f"Block with id: {block_id} deleted successfully")
-        return SuccessResponse(message="Block deleted successfully")
-
-    @handle_exceptions
-    async def create_connection(self, connection: BlockConnection, user: dict = Depends(get_current_user)) -> SuccessResponse:
-        """Creates connection between blocks"""
-        logging_client.info(f"Creating connection between block {connection.source_block_id} and block {connection.target_block_id}")
-        validate_block_ids([connection.source_block_id, connection.target_block_id])
+        bot = await self.bot_repository.get_by_id(bot_id)
+        if not bot:
+             logging_client.warning(f"Bot with id: {bot_id} not found")
+             raise BotNotFoundException(bot_id=bot_id)
 
         if "admin" not in user.get("roles", []):
-            logging_client.warning(f"User: {user['id']} does not have permission to create block connections")
+            logging_client.warning(f"User: {user['id']} does not have permission to delete bots")
             raise HTTPException(status_code=403, detail="Permission denied")
-        
-        source_block = await self.block_repository.get_by_id(connection.source_block_id)
-        target_block = await self.block_repository.get_by_id(connection.target_block_id)
 
-        if not source_block or not target_block:
-            logging_client.warning(f"One or more blocks for connection were not found")
-            raise HTTPException(status_code=404, detail="One or more blocks for connection were not found")
-        
-        validate_connections(connection.source_block_id, connection.target_block_id)
-        await self.block_repository.create_connection(connection.source_block_id, connection.target_block_id)
-        logging_client.info(f"Connection created between block {connection.source_block_id} and block {connection.target_block_id}")
-        return SuccessResponse(message="Connection created successfully")
+        await self.bot_repository.delete(bot_id)
+        logging_client.info(f"Bot with id: {bot_id} deleted successfully")
+        return SuccessResponse(message="Bot deleted successfully")

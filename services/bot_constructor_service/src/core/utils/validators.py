@@ -14,7 +14,7 @@ def validate_bot_id(bot_id: int) -> None:
     if not isinstance(bot_id, int) or bot_id <= 0:
         logger.error(f"Invalid bot ID: {bot_id}")
         raise HTTPException(status_code=400, detail="Invalid bot ID")
-    logger.debug(f"Bot ID: {bot_id} is valid.")
+    logging_client.debug(f"Bot ID: {bot_id} is valid.")
 
 
 def validate_block_ids(block_ids: List[int]) -> None:
@@ -24,7 +24,7 @@ def validate_block_ids(block_ids: List[int]) -> None:
     ):
         logger.error(f"Invalid block IDs: {block_ids}")
         raise HTTPException(status_code=400, detail="Invalid block IDs")
-    logger.debug(f"Block IDs: {block_ids} are valid.")
+    logging_client.debug(f"Block IDs: {block_ids} are valid.")
 
 
 def validate_block_type(block_type: str) -> None:
@@ -63,7 +63,7 @@ def validate_block_type(block_type: str) -> None:
     if not isinstance(block_type, str) or block_type not in allowed_types:
         logger.error(f"Invalid block type: {block_type}")
         raise HTTPException(status_code=400, detail="Invalid block type")
-    logger.debug(f"Block type: {block_type} is valid.")
+    logging_client.debug(f"Block type: {block_type} is valid.")
 
 
 def validate_bot_name(bot_name: str) -> None:
@@ -73,7 +73,7 @@ def validate_bot_name(bot_name: str) -> None:
         raise HTTPException(
             status_code=400, detail="Invalid bot name. Must be between 3 and 255 characters."
         )
-    logger.debug(f"Bot name: {bot_name} is valid.")
+    logging_client.debug(f"Bot name: {bot_name} is valid.")
 
 
 def validate_connections(source_block_id: int, target_block_id: int) -> None:
@@ -87,7 +87,7 @@ def validate_connections(source_block_id: int, target_block_id: int) -> None:
     if source_block_id == target_block_id:
         logger.error(f"Source and target block IDs must not be the same: source: {source_block_id}, target:{target_block_id}")
         raise HTTPException(status_code=400, detail="Source and target block IDs must not be the same")
-    logger.debug(f"Connection block IDs are valid. Source ID: {source_block_id}, target ID:{target_block_id}")
+    logging_client.debug(f"Connection block IDs are valid. Source ID: {source_block_id}, target ID:{target_block_id}")
 
 
 def validate_content(content: Any) -> None:
@@ -97,7 +97,7 @@ def validate_content(content: Any) -> None:
         raise HTTPException(
             status_code=400, detail="Invalid content. Must be a dictionary, string or None."
         )
-    logger.debug(f"Block content is valid.")
+    logging_client.debug(f"Block content is valid.")
 
 
 def validate_webhook_url(url: str) -> None:
@@ -110,7 +110,7 @@ def validate_webhook_url(url: str) -> None:
     except ValueError:
         logger.error(f"Invalid webhook URL format: {url}")
         raise HTTPException(status_code=400, detail="Invalid webhook URL format")
-    logger.debug(f"Webhook URL: {url} is valid.")
+    logging_client.debug(f"Webhook URL: {url} is valid.")
 
 
 def validate_chat_id(chat_id: int) -> None:
@@ -118,7 +118,7 @@ def validate_chat_id(chat_id: int) -> None:
     if not isinstance(chat_id, int) or chat_id <= 0:
         logger.error(f"Invalid chat ID: {chat_id}")
         raise HTTPException(status_code=400, detail="Invalid chat ID")
-    logger.debug(f"Chat ID: {chat_id} is valid.")
+    logging_client.debug(f"Chat ID: {chat_id} is valid.")
 
 
 def validate_permission(permission: str) -> None:
@@ -126,7 +126,7 @@ def validate_permission(permission: str) -> None:
     if not isinstance(permission, str) or not permission.strip():
         logger.error(f"Invalid permission: {permission}")
         raise HTTPException(status_code=400, detail="Invalid permission")
-    logger.debug(f"Permission: {permission} is valid.")
+    logging_client.debug(f"Permission: {permission} is valid.")
 
 
 def validate_user_id(user_id: int) -> None:
@@ -134,7 +134,7 @@ def validate_user_id(user_id: int) -> None:
     if not isinstance(user_id, int) or user_id <= 0:
         logger.error(f"Invalid user ID: {user_id}")
         raise HTTPException(status_code=400, detail="Invalid user ID")
-    logger.debug(f"User ID: {user_id} is valid.")
+    logging_client.debug(f"User ID: {user_id} is valid.")
 
 
 def validate_status(status: str) -> None:
@@ -143,7 +143,7 @@ def validate_status(status: str) -> None:
     if not isinstance(status, str) or status not in allowed_statuses:
         logger.error(f"Invalid status: {status}")
         raise HTTPException(status_code=400, detail="Invalid status")
-    logger.debug(f"Status: {status} is valid.")
+    logging_client.debug(f"Status: {status} is valid.")
 
 
 def validate_version(version: str) -> None:
@@ -151,7 +151,7 @@ def validate_version(version: str) -> None:
     if not isinstance(version, str) or not version.strip():
         logger.error(f"Invalid version: {version}")
         raise HTTPException(status_code=400, detail="Invalid version")
-    logger.debug(f"Version: {version} is valid.")
+    logging_client.debug(f"Version: {version} is valid.")
 
 def validate_variable_data(data: Dict[str, Any]) -> None:
     """Validates variable data structure."""
@@ -164,7 +164,7 @@ def validate_variable_data(data: Dict[str, Any]) -> None:
     if "action" not in data or not isinstance(data["action"], str) or data["action"] not in ["define", "assign", "retrieve", "update"]:
         logger.error(f"Invalid variable action: {data.get('action')}")
         raise HTTPException(status_code=400, detail="Invalid variable action. Must be define, assign, retrieve or update.")
-    logger.debug(f"Variable data: {data} is valid.")
+    logging_client.debug(f"Variable data: {data} is valid.")
 
 def validate_api_request_data(data: Dict[str, Any]) -> None:
     """Validates api request data"""
@@ -186,7 +186,7 @@ def validate_api_request_data(data: Dict[str, Any]) -> None:
     if data.get("body") and not isinstance(data.get("body"), (dict, str, type(None))):
          logger.error(f"Invalid body for api request, body must be dictionary, string or None")
          raise HTTPException(status_code=400, detail="Invalid body for api request, body must be dictionary, string or None")
-    logger.debug(f"Api request data is valid.")
+    logging_client.debug(f"Api request data is valid.")
 
 def validate_database_data(data: Dict[str, Any]) -> None:
    """Validates database data"""
@@ -199,7 +199,7 @@ def validate_database_data(data: Dict[str, Any]) -> None:
    if data.get("params") and not isinstance(data.get("params"), dict):
        logger.error(f"Invalid params for database query, params must be dictionary")
        raise HTTPException(status_code=400, detail="Invalid params for database query, params must be dictionary")
-   logger.debug(f"Database data is valid")
+   logging_client.debug(f"Database data is valid")
    
 def validate_timer_data(data: Dict[str, Any]) -> None:
     """Validates timer data"""
@@ -209,7 +209,7 @@ def validate_timer_data(data: Dict[str, Any]) -> None:
     if "delay" not in data or not isinstance(data['delay'], (int, str)):
          logger.error(f"Invalid delay for timer block: {data.get('delay')}")
          raise HTTPException(status_code=400, detail="Invalid delay for timer block, must be int or str")
-    logger.debug(f"Timer data is valid")
+    logging_client.debug(f"Timer data is valid")
 
 def validate_state_machine_data(data: Dict[str, Any]) -> None:
   """Validates state machine data"""
@@ -232,7 +232,7 @@ def validate_state_machine_data(data: Dict[str, Any]) -> None:
     if "target_state" not in transition or not isinstance(transition['target_state'], str) or not transition['target_state'].strip():
        logger.error(f"Invalid target state: {transition.get('target_state')}")
        raise HTTPException(status_code=400, detail="Invalid target state, must be a string")
-  logger.debug(f"State machine data is valid")
+  logging_client.debug(f"State machine data is valid")
 
 def validate_custom_filter_data(data: Dict[str, Any]) -> None:
     """Validates custom filter data"""
@@ -247,7 +247,7 @@ def validate_custom_filter_data(data: Dict[str, Any]) -> None:
     except SyntaxError:
        logger.error(f"Invalid syntax for filter: {data.get('filter')}")
        raise HTTPException(status_code=400, detail="Invalid syntax for filter, must be valid python syntax")
-    logger.debug(f"Custom filter data is valid")
+    logging_client.debug(f"Custom filter data is valid")
 
 def validate_rate_limiting_data(data: Dict[str, Any]) -> None:
     """Validates rate limiting data"""
@@ -260,4 +260,4 @@ def validate_rate_limiting_data(data: Dict[str, Any]) -> None:
     if "interval" not in data or not isinstance(data['interval'], (int, str)):
          logger.error(f"Invalid interval in rate limiting block: {data.get('interval')}")
          raise HTTPException(status_code=400, detail="Invalid interval in rate limiting block, must be int or string")
-    logger.debug(f"Rate limiting data is valid")
+    logging_client.debug(f"Rate limiting data is valid")

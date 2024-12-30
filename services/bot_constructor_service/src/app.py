@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api import (
     bot_router,
@@ -19,23 +20,24 @@ from src.api import (
     ErrorHandlerMiddleware,
 )
 from src.config import settings
-from src.db.database import init_db, close_engine, check_db_connection
+from src.db.database import init_db, close_engine, check_db_connection, get_session
 from src.integrations.logging_client import LoggingClient
 from src.integrations.redis_client import redis_client
+from src.integrations.telegram import TelegramClient
 
 logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
 app = FastAPI(
     title="Bot Constructor Service",
     description="Microservice for creating and managing Telegram bots.",
-    version="0.1.0",
+    version=settings.API_VERSION,
 )
 
 
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace with your actual frontend origins
+    allow_origins=settings.ALLOWED_ORIGINS.split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -82,7 +84,15 @@ async def startup_event():
     await redis_client.connect()
     logging_client.info("Redis client connected")
     
+    # Initialize telegram client
+    telegram_client = TelegramClient()
+    try:
+        await telegram_client.validate_token(settings.TELEGRAM_BOT_TOKEN)
+        logging_client.info("Telegram token is valid")
+    except Exception as e:
+         logging_client.error(f"Telegram token is invalid, exception: {e}")
     
+
 @app.on_event("shutdown")
 async def shutdown_event():
     logging_client.info("Shutting down the application")

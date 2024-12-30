@@ -1,6 +1,4 @@
-# src/db/models/block_model.py
-
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, func
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, func, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from src.db.database import Base
@@ -15,10 +13,11 @@ class Block(Base):
     id = Column(Integer, primary_key=True, index=True)
     bot_id = Column(Integer, ForeignKey("bots.id", ondelete="CASCADE"), nullable=False)
     type = Column(String(255), nullable=False, index=True)
-    content = Column(JSON, nullable=False)
+    content = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
+    user_message_id = Column(Integer, nullable=True)
+    bot_message_id = Column(Integer, nullable=True)
     connections = relationship(
         "Connection",
         primaryjoin="Block.id==Connection.source_block_id",
