@@ -10,7 +10,8 @@ from .flow_router import router as flow_router
 from .variable_router import router as variable_router
 from .db_router import router as db_router
 from .api_request_router import router as api_request_router
-
+from .bot_settings_router import router as bot_settings_router
+from .connection_router import router as connection_router
 
 
 __all__ = [
@@ -26,4 +27,6 @@ __all__ = [
     "variable_router",
     "db_router",
     "api_request_router",
+    "bot_settings_router",
+    "connection_router",
 ]

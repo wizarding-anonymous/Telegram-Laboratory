@@ -1,16 +1,16 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import NullPool
 from loguru import logger
 import os
 from typing import AsyncGenerator, Optional
 from src.config import settings
 from urllib.parse import urlparse, urlunparse
+from alembic import config, command
 
 # Load database URL from environment variables
-DATABASE_URL = settings.DATABASE_URL
+DATABASE_URL = settings.full_database_url
 
 # Create SQLAlchemy Base
 Base = declarative_base()
@@ -20,6 +20,7 @@ engine = create_async_engine(
     DATABASE_URL,
     echo=False,  # Set True for detailed SQL logs during development
     poolclass=NullPool,  # Avoid connection pooling for simplicity
+    future = True
 )
 
 
@@ -75,15 +76,21 @@ async def close_engine():
 
 async def check_db_connection(session: AsyncSession) -> Optional[bool]:
     """
-    Проверяет подключение к базе данных, выполняя простое запрос.
-    Возвращает True, если соединение успешно, False или None в случае ошибки.
+    Checks the database connection by executing a simple query.
+
+    Args:
+       session (AsyncSession): SQLAlchemy async session
+
+    Returns:
+        Optional[bool]: True if the database connection is healthy, False otherwise, or None if exception occurred.
     """
     try:
-        result = await session.execute("SELECT 1")
+        result = await session.execute(text("SELECT 1"))
         return result.scalar() == 1
     except SQLAlchemyError as e:
         logger.error(f"Database connection error: {e}")
         return None
+
 
 def get_db_uri(bot_id: int) -> str:
         """
@@ -103,10 +110,10 @@ def get_db_uri(bot_id: int) -> str:
 async def apply_migrations():
     """Applies database migrations."""
     try:
-        from alembic import config, command
+        
         alembic_config = config.Config()
         alembic_config.set_main_option("script_location", "src/db/migrations")
-        alembic_config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+        alembic_config.set_main_option("sqlalchemy.url", settings.full_database_url)
         logger.info("Applying database migrations...")
         command.upgrade(alembic_config, "head")
         logger.info("Database migrations applied successfully")

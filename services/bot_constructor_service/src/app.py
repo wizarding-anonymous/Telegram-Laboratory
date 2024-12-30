@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,14 +16,16 @@ from src.api import (
     variable_router,
     db_router,
     api_request_router,
-    AuthMiddleware,
-    ErrorHandlerMiddleware,
+    bot_settings_router,
+    connection_router,
+    middleware,
 )
 from src.config import settings
 from src.db.database import init_db, close_engine, check_db_connection, get_session
 from src.integrations.logging_client import LoggingClient
 from src.integrations.redis_client import redis_client
 from src.integrations.telegram import TelegramClient
+from src.core.utils.exceptions import TelegramAPIException
 
 logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
@@ -39,15 +41,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS.split(","),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=settings.ALLOWED_METHODS,
+    allow_headers=settings.ALLOWED_HEADERS,
 )
 
 # Add exception handling middleware
-app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(middleware.ErrorHandlerMiddleware)
 
 # Add authentication middleware
-app.add_middleware(AuthMiddleware)
+app.add_middleware(middleware.AuthMiddleware)
 
 # Routers
 app.include_router(bot_router, prefix="/bots", tags=["Bots"])
@@ -62,6 +64,8 @@ app.include_router(flow_router, prefix="/bots", tags=["Flows"])
 app.include_router(variable_router, prefix="/bots", tags=["Variables"])
 app.include_router(db_router, prefix="/bots", tags=["Database"])
 app.include_router(api_request_router, prefix="/bots", tags=["Api Requests"])
+app.include_router(bot_settings_router, prefix="/bots", tags=["Bot Settings"])
+app.include_router(connection_router, prefix="/blocks", tags=["Connections"])
 
 
 # Prometheus
@@ -91,7 +95,7 @@ async def startup_event():
         logging_client.info("Telegram token is valid")
     except Exception as e:
          logging_client.error(f"Telegram token is invalid, exception: {e}")
-    
+         raise TelegramAPIException(detail=f"Telegram token is invalid: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -110,4 +114,4 @@ async def health(session: AsyncSession = Depends(get_session)):
     if db_connected and redis_connected:
       return {"status": "ok", "details": "Service is healthy"}
     else:
-      return {"status": "error", "details": f"Service is not healthy db_connection: {db_connected} redis_connection: {redis_connected}"}, 500
+       raise HTTPException(status_code=500, detail=f"Service is not healthy db_connection: {db_connected} redis_connection: {redis_connected}")

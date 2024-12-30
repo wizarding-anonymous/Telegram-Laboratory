@@ -22,9 +22,10 @@ from src.integrations.auth_service import get_current_user
 from src.integrations.logging_client import LoggingClient
 from src.integrations.telegram import TelegramClient
 from src.core.utils.exceptions import BotNotFoundException, InvalidTokenException, InvalidBlockTypeException
+from src.integrations.data_storage_client import DataStorageClient
+from src.config import settings
 
-
-logging_client = LoggingClient(service_name="bot_constructor")
+logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
 
 class BotController:
@@ -35,10 +36,12 @@ class BotController:
     def __init__(
         self,
         bot_repository: BotRepository = Depends(),
-         telegram_client: TelegramClient = Depends()
+        telegram_client: TelegramClient = Depends(),
+         data_storage_client: DataStorageClient = Depends()
     ):
         self.bot_repository = bot_repository
         self.telegram_client = telegram_client
+        self.data_storage_client = data_storage_client
 
     @handle_exceptions
     async def create_bot(
@@ -48,7 +51,6 @@ class BotController:
         logging_client.info(f"Creating bot with name: {bot_create.name}")
 
         validate_bot_name(bot_create.name)
-
         if "admin" not in user.get("roles", []):
             logging_client.warning(
                 f"User with id: {user['id']} does not have permission to create bots"
@@ -57,7 +59,7 @@ class BotController:
         
         #Validate telegram token
         try:
-            self.telegram_client.validate_token(bot_create.token)
+            await self.telegram_client.validate_token(bot_create.token)
         except Exception as e:
            logging_client.error(f"Error when validate telegram token: {e}")
            raise InvalidTokenException(detail=str(e))
@@ -66,9 +68,11 @@ class BotController:
            logging_client.error(f"Invalid bot library: {bot_create.library}")
            raise InvalidBlockTypeException(block_type=bot_create.library)
 
-
         bot = await self.bot_repository.create(bot_create.model_dump(), user_id=user["id"])
         logging_client.info(f"Bot with id: {bot.id} created successfully")
+        
+        await self.data_storage_client.create_database_for_bot(bot_id=bot.id, user_id=user.get("id"))
+
         return BotResponse(**bot.model_dump())
 
     @handle_exceptions
@@ -143,7 +147,7 @@ class BotController:
          #Validate telegram token
         if bot_data.get("token"):
             try:
-                self.telegram_client.validate_token(bot_data.get("token"))
+                await self.telegram_client.validate_token(bot_data.get("token"))
             except Exception as e:
                 logging_client.error(f"Error when validate telegram token: {e}")
                 raise InvalidTokenException(detail=str(e))
@@ -177,4 +181,7 @@ class BotController:
 
         await self.bot_repository.delete(bot_id)
         logging_client.info(f"Bot with id: {bot_id} deleted successfully")
+        
+        await self.data_storage_client.delete_database_for_bot(bot_id=bot_id)
+
         return SuccessResponse(message="Bot deleted successfully")

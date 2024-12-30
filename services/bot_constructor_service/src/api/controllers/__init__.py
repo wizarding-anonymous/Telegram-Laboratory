@@ -12,6 +12,8 @@ from .flow_controller import FlowController
 from .variable_controller import VariableController
 from .db_controller import DbController
 from .api_request_controller import ApiRequestController
+from .bot_settings_controller import BotSettingsController
+from .connection_controller import ConnectionController
 
 __all__ = [
     "BotController",
@@ -26,4 +28,6 @@ __all__ = [
     "VariableController",
     "DbController",
     "ApiRequestController",
+    "BotSettingsController",
+    "ConnectionController",
 ]

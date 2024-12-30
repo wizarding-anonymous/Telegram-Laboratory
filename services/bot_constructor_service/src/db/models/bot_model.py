@@ -21,6 +21,6 @@ class Bot(Base):
     logic = Column(JSON, nullable=True)  # Using JSON type to store bot logic
     token = Column(Text, nullable=False) # Telegram bot token
     library = Column(String(50), nullable=False) # library (telegram_api, aiogram, telebot)
-
+    
     def __repr__(self):
         return f"<Bot(id={self.id}, name='{self.name}')>"

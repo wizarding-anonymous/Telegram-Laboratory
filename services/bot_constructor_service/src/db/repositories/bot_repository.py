@@ -23,10 +23,10 @@ class BotRepository:
         logging_client.info("BotRepository initialized")
 
     @handle_exceptions
-    async def create(self, bot_data: Dict[str, Any]) -> Bot:
+    async def create(self, bot_data: Dict[str, Any], user_id: int) -> Bot:
         """Creates a new bot."""
-        logging_client.info(f"Creating bot with data: {bot_data}")
-        bot = Bot(**bot_data)
+        logging_client.info(f"Creating bot with data: {bot_data} for user {user_id}")
+        bot = Bot(**bot_data, user_id=user_id)
         self.session.add(bot)
         await self.session.commit()
         await self.session.refresh(bot)
@@ -66,6 +66,14 @@ class BotRepository:
         logging_client.info(f"Found {len(bots)} of {total} bots for user_id: {user_id}")
         return bots, total
 
+    @handle_exceptions
+    async def list_by_user_id(self, user_id: int) -> List[Bot]:
+        """Gets a list of bots for a specific user ID."""
+        logging_client.info(f"Getting list of bots for user_id: {user_id}")
+        result = await self.session.execute(select(Bot).where(Bot.user_id == user_id))
+        bots = list(result.scalars().all())
+        logging_client.info(f"Found {len(bots)} bots for user_id: {user_id}")
+        return bots
 
     @handle_exceptions
     async def update(self, bot_id: int, bot_data: Dict[str, Any]) -> Bot:

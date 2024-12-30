@@ -1,6 +1,7 @@
 import os
 from pydantic_settings import BaseSettings
 from pydantic import Field
+from typing import Optional
 import string
 
 
@@ -11,7 +12,9 @@ class Settings(BaseSettings):
 
     # General settings
     SERVICE_NAME: str = Field("BotConstructor", env="SERVICE_NAME")
-    ENVIRONMENT: str = Field("development", env="ENVIRONMENT")  # "development", "production", "testing"
+    ENVIRONMENT: str = Field(
+        "development", env="ENVIRONMENT"
+    )  # "development", "production", "testing"
     DEBUG: bool = Field(True, env="DEBUG")  # Enable/Disable debug mode
 
     # Application settings
@@ -40,7 +43,7 @@ class Settings(BaseSettings):
                 DATABASE_PASSWORD=self.DATABASE_PASSWORD,
                 DATABASE_HOST=self.DATABASE_HOST,
                 DATABASE_PORT=self.DATABASE_PORT,
-                DATABASE_NAME=self.DATABASE_NAME
+                DATABASE_NAME=self.DATABASE_NAME,
             )
         else:
             return (
@@ -50,21 +53,31 @@ class Settings(BaseSettings):
 
     # Redis settings
     REDIS_URL: str = Field("redis://localhost:6379/0", env="REDIS_URL")
+    REDIS_TIMEOUT: int = Field(5, env="REDIS_TIMEOUT")
 
     # Auth Service settings
     AUTH_SERVICE_URL: str = Field("http://localhost:8002", env="AUTH_SERVICE_URL")
-    
+    AUTH_SERVICE_TIMEOUT: int = Field(10, env="AUTH_SERVICE_TIMEOUT")
+
     # Data Storage Service settings
-    DATA_STORAGE_SERVICE_URL: str = Field("http://localhost:8001", env="DATA_STORAGE_SERVICE_URL")
-    
+    DATA_STORAGE_SERVICE_URL: str = Field(
+        "http://localhost:8001", env="DATA_STORAGE_SERVICE_URL"
+    )
+    DATA_STORAGE_SERVICE_TIMEOUT: int = Field(10, env="DATA_STORAGE_SERVICE_TIMEOUT")
+
     # Logging Service settings
-    LOGGING_SERVICE_URL: str = Field("http://localhost:8003", env="LOGGING_SERVICE_URL")
+    LOGGING_SERVICE_URL: str = Field(
+        "http://localhost:8003", env="LOGGING_SERVICE_URL"
+    )
+    LOGGING_SERVICE_TIMEOUT: int = Field(10, env="LOGGING_SERVICE_TIMEOUT")
 
     # Telegram API settings
     TELEGRAM_BOT_TOKEN: str = Field(..., env="TELEGRAM_BOT_TOKEN")
-    
-    #Telegram library
-    TELEGRAM_BOT_LIBRARY: str = Field("telegram_api", env="TELEGRAM_BOT_LIBRARY")
+
+    # Telegram bot library
+    TELEGRAM_BOT_LIBRARY: str = Field(
+        "telegram_api", env="TELEGRAM_BOT_LIBRARY"
+    )  # telegram_api, aiogram, telebot
 
     # Logging settings
     LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
@@ -77,12 +90,16 @@ class Settings(BaseSettings):
     MIN_CONNECTIONS_COUNT: int = Field(1, env="MIN_CONNECTIONS_COUNT")
 
     # CORS settings
-    ALLOWED_ORIGINS: str = Field("http://localhost,http://127.0.0.1", env="ALLOWED_ORIGINS")
-   
+    ALLOWED_ORIGINS: str = Field(
+        "http://localhost,http://127.0.0.1", env="ALLOWED_ORIGINS"
+    )
+    ALLOWED_METHODS: list = Field(["*"], env="ALLOWED_METHODS")
+    ALLOWED_HEADERS: list = Field(["*"], env="ALLOWED_HEADERS")
 
     class Config:
         env_file = ".env"  # Use a .env file to load environment variables
         env_file_encoding = "utf-8"
+
 
 # Load configuration
 settings = Settings()
@@ -101,3 +118,5 @@ if __name__ == "__main__":
     print("Data Storage Service URL:", settings.DATA_STORAGE_SERVICE_URL)
     print("Logging Service URL:", settings.LOGGING_SERVICE_URL)
     print("Telegram bot library:", settings.TELEGRAM_BOT_LIBRARY)
+    print("Allowed Methods:", settings.ALLOWED_METHODS)
+    print("Allowed Headers:", settings.ALLOWED_HEADERS)

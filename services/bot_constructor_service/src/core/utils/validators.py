@@ -37,9 +37,12 @@ def validate_block_type(block_type: str) -> None:
         "if_condition",
         "loop",
         "api_request",
-        "database",
-        "webhook",
-        "callback",
+        "database_connect",
+        "database_query",
+        "set_webhook",
+         "delete_webhook",
+        "handle_callback_query",
+        "send_callback_response",
         "variable",
         "try_catch",
         "raise_error",
@@ -70,6 +73,18 @@ def validate_block_type(block_type: str) -> None:
         "send_venue",
         "send_game",
         "send_poll",
+         "set_chat_title",
+        "set_chat_description",
+        "get_chat_members",
+        "ban_user",
+        "unban_user",
+        "pin_message",
+        "unpin_message",
+        "create_from_template",
+          "save_user_data",
+          "retrieve_user_data",
+          "clear_user_data",
+          "manage_session"
     ]
     if not isinstance(block_type, str) or block_type not in allowed_types:
         logger.error(f"Invalid block type: {block_type}")
@@ -227,8 +242,8 @@ def validate_state_machine_data(data: Dict[str, Any]) -> None:
   if not isinstance(data, dict):
         logger.error(f"Invalid state machine data: {data}. Must be a dictionary.")
         raise HTTPException(status_code=400, detail="Invalid state machine data. Must be a dictionary.")
-  if "state" not in data or not isinstance(data['state'], str) or not data['state'].strip():
-       logger.error(f"Invalid state in state machine block: {data.get('state')}")
+  if "initial_state" not in data or not isinstance(data['initial_state'], str) or not data['initial_state'].strip():
+       logger.error(f"Invalid state in state machine block: {data.get('initial_state')}")
        raise HTTPException(status_code=400, detail="Invalid state in state machine block. Must be a non-empty string.")
   if "transitions" not in data or not isinstance(data['transitions'], list):
        logger.error(f"Invalid transitions in state machine block: {data.get('transitions')}. Must be a list")
@@ -237,11 +252,11 @@ def validate_state_machine_data(data: Dict[str, Any]) -> None:
     if not isinstance(transition, dict):
       logger.error(f"Invalid transition {transition}, must be a dictionary")
       raise HTTPException(status_code=400, detail="Invalid transition, must be a dictionary")
-    if "trigger" not in transition or not isinstance(transition['trigger'], str) or not transition['trigger'].strip():
-      logger.error(f"Invalid trigger: {transition.get('trigger')}")
-      raise HTTPException(status_code=400, detail="Invalid trigger, must be a string")
-    if "target_state" not in transition or not isinstance(transition['target_state'], str) or not transition['target_state'].strip():
-       logger.error(f"Invalid target state: {transition.get('target_state')}")
+    if "from_state" not in transition or not isinstance(transition['from_state'], str) or not transition['from_state'].strip():
+      logger.error(f"Invalid from state: {transition.get('from_state')}")
+      raise HTTPException(status_code=400, detail="Invalid from state, must be a string")
+    if "to_state" not in transition or not isinstance(transition['to_state'], str) or not transition['to_state'].strip():
+       logger.error(f"Invalid target state: {transition.get('to_state')}")
        raise HTTPException(status_code=400, detail="Invalid target state, must be a string")
   logging_client.debug(f"State machine data is valid")
 
@@ -281,21 +296,17 @@ def validate_keyboard_data(data: Dict[str, Any]) -> None:
     if "buttons" not in data or not isinstance(data["buttons"], list):
           logger.error(f"Invalid buttons data: {data.get('buttons')}. Must be a list")
           raise HTTPException(status_code=400, detail="Invalid buttons, must be a list")
-    if "keyboard_type" not in data or not isinstance(data["keyboard_type"], str) or data["keyboard_type"] not in ['reply', 'inline']:
-        logger.error(f"Invalid keyboard type: {data.get('keyboard_type')}. Must be 'reply' or 'inline'")
+    if "type" not in data or not isinstance(data["type"], str) or data["type"] not in ['reply', 'inline']:
+        logger.error(f"Invalid keyboard type: {data.get('type')}. Must be 'reply' or 'inline'")
         raise HTTPException(status_code=400, detail="Invalid keyboard type. Must be 'reply' or 'inline'")
 
-    for row in data["buttons"]:
-         if not isinstance(row, list):
-             logger.error(f"Invalid keyboard row: {row}. Must be a list.")
-             raise HTTPException(status_code=400, detail="Invalid keyboard row. Must be a list.")
-         for button in row:
-            if not isinstance(button, dict):
-                logger.error(f"Invalid button data: {button}. Must be a dict.")
-                raise HTTPException(status_code=400, detail="Invalid button data. Must be a dict.")
-            if "text" not in button or not isinstance(button["text"], str) or not button["text"].strip():
-                 logger.error(f"Invalid button text: {button.get('text')}")
-                 raise HTTPException(status_code=400, detail="Invalid button text. Must be a non-empty string")
+    for button in data["buttons"]:
+         if not isinstance(button, dict):
+              logger.error(f"Invalid keyboard row: {button}. Must be a list.")
+              raise HTTPException(status_code=400, detail="Invalid keyboard row. Must be a list.")
+         if "text" not in button or not isinstance(button["text"], str) or not button["text"].strip():
+              logger.error(f"Invalid button text: {button.get('text')}")
+              raise HTTPException(status_code=400, detail="Invalid button text. Must be a non-empty string")
     logging_client.debug(f"Keyboard data is valid")
     
 def validate_callback_data(data: Dict[str, Any]) -> None:
@@ -303,7 +314,28 @@ def validate_callback_data(data: Dict[str, Any]) -> None:
     if not isinstance(data, dict):
         logger.error(f"Invalid callback data: {data}. Must be a dictionary.")
         raise HTTPException(status_code=400, detail="Invalid callback data. Must be a dictionary")
-    if "callback_data" not in data or not isinstance(data["callback_data"], str) or not data["callback_data"].strip():
-        logger.error(f"Invalid callback data: {data.get('callback_data')}")
+    if "data" not in data or not isinstance(data["data"], str) or not data["data"].strip():
+        logger.error(f"Invalid callback data: {data.get('data')}")
         raise HTTPException(status_code=400, detail="Invalid callback data. Must be a non-empty string.")
     logging_client.debug(f"Callback data is valid.")
+
+def validate_bot_library(library: str) -> None:
+    """Validates the bot library string."""
+    allowed_libraries = ["telegram_api", "aiogram", "telebot"]
+    if not isinstance(library, str) or library not in allowed_libraries:
+         logger.error(f"Invalid bot library: {library}")
+         raise HTTPException(status_code=400, detail="Invalid bot library. Must be telegram_api, aiogram or telebot")
+    logging_client.debug(f"Bot library: {library} is valid.")
+
+def validate_connection_data(data: Dict[str, Any]) -> None:
+    """Validates connection data"""
+    if not isinstance(data, dict):
+        logger.error(f"Invalid connection data: {data}. Must be a dictionary.")
+        raise HTTPException(status_code=400, detail="Invalid connection data. Must be a dictionary.")
+    if "source_block_id" not in data or not isinstance(data['source_block_id'], int) or data['source_block_id'] <= 0:
+         logger.error(f"Invalid source block id: {data.get('source_block_id')}")
+         raise HTTPException(status_code=400, detail="Invalid source block id, must be int and greater than 0")
+    if "target_block_id" not in data or not isinstance(data['target_block_id'], int) or data['target_block_id'] <= 0:
+         logger.error(f"Invalid target block id: {data.get('target_block_id')}")
+         raise HTTPException(status_code=400, detail="Invalid target block id, must be int and greater than 0")
+    logging_client.debug(f"Connection data is valid")

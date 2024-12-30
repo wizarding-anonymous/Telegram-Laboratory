@@ -1,4 +1,4 @@
-from .logic_manager import LogicManager
+from .logic_manager.base import LogicManager
 from .template_manager import TemplateManager
 from .flow_chart import FlowChartManager
 from .utils import handle_exceptions
@@ -24,7 +24,11 @@ from .utils import (
     validate_callback_data,
     validate_api_request_data,
     validate_database_data,
+    validate_bot_library,
+    validate_connection_data,
 )
+
+from .logic_manager import handlers
 
 __all__ = [
     "LogicManager",
@@ -52,4 +56,7 @@ __all__ = [
     "validate_callback_data",
     "validate_api_request_data",
     "validate_database_data",
+     "validate_bot_library",
+     "validate_connection_data",
+    "handlers",
 ]
