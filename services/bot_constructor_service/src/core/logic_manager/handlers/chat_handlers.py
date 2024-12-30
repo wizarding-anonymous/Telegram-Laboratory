@@ -3,6 +3,7 @@ from src.core.utils import handle_exceptions
 from src.integrations.telegram.client import TelegramClient
 from src.core.utils import validate_chat_id, validate_user_id
 from src.core.logic_manager.handlers.utils import get_template
+from src.config import settings
 
 
 class ChatHandler:

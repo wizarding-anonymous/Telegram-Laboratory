@@ -31,6 +31,6 @@ class BotSettingsResponse(BaseModel):
     library: str = Field(
         ..., description="Telegram bot library (telegram_api, aiogram, telebot)"
     )
-
+    
     class Config:
         orm_mode = True

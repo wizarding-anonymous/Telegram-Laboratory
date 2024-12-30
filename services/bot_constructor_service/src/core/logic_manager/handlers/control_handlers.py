@@ -10,11 +10,11 @@ from src.core.utils.validators import (
 from src.core.logic_manager.handlers.utils import get_template
 from src.integrations.logging_client import LoggingClient
 from src.integrations.redis_client import redis_client
-from src.core.logic_manager.base import Block
+from src.config import settings
 import asyncio
-import json
 
-logging_client = LoggingClient(service_name="bot_constructor")
+
+logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
 
 class ControlHandler:
@@ -36,7 +36,7 @@ class ControlHandler:
         content = block.get("content", {})
         logging_client.info(f"Handling variable block {block.get('id')}")
         validate_variable_data(content)
-        action = content.get("action")
+        action = content.get("name")
         variable_name = content.get("name")
         if not action or not variable_name:
             logging_client.warning("Variable action and name were not provided")

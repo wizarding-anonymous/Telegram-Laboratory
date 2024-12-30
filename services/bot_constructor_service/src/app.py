@@ -24,8 +24,9 @@ from src.config import settings
 from src.db.database import init_db, close_engine, check_db_connection, get_session
 from src.integrations.logging_client import LoggingClient
 from src.integrations.redis_client import redis_client
-from src.integrations.telegram import TelegramClient
+from src.integrations import get_telegram_client
 from src.core.utils.exceptions import TelegramAPIException
+
 
 logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
@@ -41,19 +42,18 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS.split(","),
     allow_credentials=True,
-    allow_methods=settings.ALLOWED_METHODS,
-    allow_headers=settings.ALLOWED_HEADERS,
+    allow_methods=settings.ALLOW_METHODS,
+    allow_headers=settings.ALLOW_HEADERS,
 )
 
 # Add exception handling middleware
 app.add_middleware(middleware.ErrorHandlerMiddleware)
 
-# Add authentication middleware
-app.add_middleware(middleware.AuthMiddleware)
+
 
 # Routers
 app.include_router(bot_router, prefix="/bots", tags=["Bots"])
-app.include_router(block_router, prefix="/blocks", tags=["Blocks"])
+app.include_router(block_router, prefix="/bots", tags=["Blocks"])
 app.include_router(health_router, prefix="/health", tags=["Health"])
 app.include_router(message_router, prefix="/bots", tags=["Messages"])
 app.include_router(keyboard_router, prefix="/bots", tags=["Keyboards"])
@@ -65,7 +65,7 @@ app.include_router(variable_router, prefix="/bots", tags=["Variables"])
 app.include_router(db_router, prefix="/bots", tags=["Database"])
 app.include_router(api_request_router, prefix="/bots", tags=["Api Requests"])
 app.include_router(bot_settings_router, prefix="/bots", tags=["Bot Settings"])
-app.include_router(connection_router, prefix="/blocks", tags=["Connections"])
+app.include_router(connection_router, prefix="/bots", tags=["Connections"])
 
 
 # Prometheus
@@ -89,13 +89,14 @@ async def startup_event():
     logging_client.info("Redis client connected")
     
     # Initialize telegram client
-    telegram_client = TelegramClient()
+    telegram_client = get_telegram_client(settings.TELEGRAM_BOT_LIBRARY)
     try:
-        await telegram_client.validate_token(settings.TELEGRAM_BOT_TOKEN)
+        await telegram_client.check_connection(bot_token=settings.TELEGRAM_BOT_TOKEN)
         logging_client.info("Telegram token is valid")
     except Exception as e:
          logging_client.error(f"Telegram token is invalid, exception: {e}")
          raise TelegramAPIException(detail=f"Telegram token is invalid: {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -104,6 +105,7 @@ async def shutdown_event():
     logging_client.info("Database connection closed")
     await redis_client.close()
     logging_client.info("Redis connection closed")
+
 
 @app.get("/health")
 async def health(session: AsyncSession = Depends(get_session)):

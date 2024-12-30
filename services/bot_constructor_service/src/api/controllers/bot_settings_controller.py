@@ -7,15 +7,15 @@ from src.api.schemas import (
     SuccessResponse,
     ErrorResponse,
 )
-from src.core.utils import handle_exceptions, validate_bot_id
+from src.core.utils import handle_exceptions, validate_bot_id, validate_bot_library
 from src.db.repositories import BotRepository
-from src.integrations.auth_service import get_current_user
+from src.integrations import get_current_user, get_telegram_client
 from src.integrations.logging_client import LoggingClient
 from src.core.utils.exceptions import BotNotFoundException
-from src.integrations.telegram import TelegramClient
+from src.config import settings
 
 
-logging_client = LoggingClient(service_name="bot_constructor")
+logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
 
 class BotSettingsController:
@@ -26,11 +26,8 @@ class BotSettingsController:
     def __init__(
         self,
         bot_repository: BotRepository = Depends(),
-        telegram_client: TelegramClient = Depends(),
     ):
         self.bot_repository = bot_repository
-        self.telegram_client = telegram_client
-
 
     @handle_exceptions
     async def create_bot_settings(
@@ -52,11 +49,14 @@ class BotSettingsController:
             raise HTTPException(status_code=403, detail="Admin role required")
         
         #Validate telegram token
+        telegram_client = get_telegram_client(library=bot_settings.library)
         try:
-            await self.telegram_client.validate_token(bot_settings.token)
+            await telegram_client.check_connection(bot_token=bot_settings.token)
         except Exception as e:
              logging_client.error(f"Error when validate telegram token: {e}")
              raise HTTPException(status_code=400, detail=f"Telegram token is invalid: {e}")
+
+        validate_bot_library(bot_settings.library)
 
         bot_data = bot_settings.model_dump()
         updated_bot = await self.bot_repository.update(bot_id, bot_data)
@@ -104,12 +104,16 @@ class BotSettingsController:
         
          #Validate telegram token
         if bot_settings.token:
+           telegram_client = get_telegram_client(library=bot_settings.library or bot.library)
            try:
-               await self.telegram_client.validate_token(bot_settings.token)
+                await telegram_client.check_connection(bot_token=bot_settings.token)
            except Exception as e:
                 logging_client.error(f"Error when validate telegram token: {e}")
                 raise HTTPException(status_code=400, detail=f"Telegram token is invalid: {e}")
-    
+        
+        if bot_settings.library:
+             validate_bot_library(bot_settings.library)
+
         bot_data = bot_settings.model_dump(exclude_unset=True)
         updated_bot = await self.bot_repository.update(bot_id, bot_data)
         logging_client.info(f"Bot settings with bot_id: {bot_id} updated successfully")

@@ -37,7 +37,15 @@ from .flow_schema import FlowChartCreate, FlowChartUpdate, FlowChartResponse
 from .variable_schema import VariableCreate, VariableUpdate, VariableResponse, VariableListResponse
 from .db_schema import DatabaseConnect, DatabaseQuery, DatabaseResponse, DatabaseListResponse
 from .api_request_schema import ApiRequestCreate, ApiRequestUpdate, ApiRequestResponse, ApiRequestListResponse
-
+from .bot_settings_schema import BotSettingsCreate, BotSettingsUpdate, BotSettingsResponse
+from .connection_schema import ConnectionCreate, ConnectionUpdate, ConnectionResponse, ConnectionListResponse
+from .media_group_schema import (
+    MediaGroupCreate,
+    MediaGroupUpdate,
+    MediaGroupResponse,
+    MediaGroupListResponse,
+     MediaItemSchema,
+)
 
 
 __all__ = [
@@ -125,4 +133,22 @@ __all__ = [
     "ApiRequestUpdate",
     "ApiRequestResponse",
     "ApiRequestListResponse",
+    
+    # Bot settings schemas
+     "BotSettingsCreate",
+     "BotSettingsUpdate",
+     "BotSettingsResponse",
+    
+    #Connection schemas
+    "ConnectionCreate",
+    "ConnectionUpdate",
+    "ConnectionResponse",
+    "ConnectionListResponse",
+    
+    #Media Group Schemas
+    "MediaGroupCreate",
+    "MediaGroupUpdate",
+    "MediaGroupResponse",
+    "MediaGroupListResponse",
+    "MediaItemSchema",
 ]

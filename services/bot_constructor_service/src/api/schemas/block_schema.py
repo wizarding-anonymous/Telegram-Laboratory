@@ -10,6 +10,7 @@ class BlockBase(BaseModel):
     content: Optional[Dict[str, Any]] = Field(None, description="Content of the block (e.g., text, url, buttons, logic)")
     connections: Optional[List[int]] = Field(None, description="List of connected block IDs")
     
+
 class BlockCreate(BlockBase):
     """Schema for creating a new block."""
     pass
@@ -30,6 +31,9 @@ class BlockResponse(BlockBase):
     updated_at: Optional[datetime] = Field(None, description="Update timestamp")
     user_message_id: Optional[int] = Field(None, description="User message id")
     bot_message_id: Optional[int] = Field(None, description="Bot message id")
+    
+    class Config:
+        orm_mode = True
 
 
 class BlockConnection(BaseModel):
@@ -62,17 +66,22 @@ class TextMessageResponse(BaseModel):
     bot_message_id: Optional[int] = Field(None, description="Bot message id")
     connections: Optional[List[int]] = Field(None, description="List of connected block IDs")
 
+    class Config:
+        orm_mode = True
+
 
 class KeyboardCreate(BaseModel):
     """Schema for creating a new keyboard block."""
     bot_id: int = Field(..., description="ID of the bot this block belongs to")
     buttons: List[List[str]] = Field(..., description="List of buttons for the keyboard")
+    type: str = Field(..., description="Type of the keyboard(reply or inline)")
     connections: Optional[List[int]] = Field(None, description="List of connected block IDs")
 
 
 class KeyboardUpdate(BaseModel):
     """Schema for updating an existing keyboard block."""
     buttons: Optional[List[List[str]]] = Field(None, description="List of buttons for the keyboard")
+    type: Optional[str] = Field(None, description="Type of the keyboard(reply or inline)")
     connections: Optional[List[int]] = Field(None, description="List of connected block IDs")
 
 
@@ -84,18 +93,21 @@ class KeyboardResponse(BaseModel):
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Update timestamp")
     connections: Optional[List[int]] = Field(None, description="List of connected block IDs")
+    
+    class Config:
+        orm_mode = True
 
 
 class CallbackCreate(BaseModel):
     """Schema for creating a new callback block."""
     bot_id: int = Field(..., description="ID of the bot this block belongs to")
-    callback_data: str = Field(..., description="Callback data")
+    data: str = Field(..., description="Callback data")
     connections: Optional[List[int]] = Field(None, description="List of connected block IDs")
 
 
 class CallbackUpdate(BaseModel):
     """Schema for updating an existing callback block."""
-    callback_data: Optional[str] = Field(None, description="Callback data")
+    data: Optional[str] = Field(None, description="Callback data")
     connections: Optional[List[int]] = Field(None, description="List of connected block IDs")
 
 
@@ -103,11 +115,13 @@ class CallbackResponse(BaseModel):
     """Schema for a callback block response."""
     id: int = Field(..., description="ID of the block")
     type: str = Field(..., description="Type of the block")
-    callback_data: str = Field(..., description="Callback data")
+    data: str = Field(..., description="Callback data")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Update timestamp")
     connections: Optional[List[int]] = Field(None, description="List of connected block IDs")
-
+    
+    class Config:
+        orm_mode = True
 
 class ApiRequestCreate(BaseModel):
     """Schema for creating a new API request block."""
@@ -139,7 +153,9 @@ class ApiRequestResponse(BaseModel):
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Update timestamp")
     connections: Optional[List[int]] = Field(None, description="List of connected block IDs")
-
+    
+    class Config:
+        orm_mode = True
 
 class WebhookCreate(BaseModel):
     """Schema for creating a new webhook block."""
@@ -162,3 +178,6 @@ class WebhookResponse(BaseModel):
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Update timestamp")
     connections: Optional[List[int]] = Field(None, description="List of connected block IDs")
+    
+    class Config:
+        orm_mode = True

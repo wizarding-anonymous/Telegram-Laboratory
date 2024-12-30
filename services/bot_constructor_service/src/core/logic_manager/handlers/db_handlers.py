@@ -4,13 +4,14 @@ from src.db.repositories import DatabaseRepository
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.database import get_session
-from src.core.logic_manager.utils import get_template
+from src.core.logic_manager.handlers.utils import get_template
 from src.integrations.logging_client import LoggingClient
 from src.core.utils.validators import validate_database_data
+from src.config import settings
+from src.core.logic_manager.base import Block
 import json
 
-
-logging_client = LoggingClient(service_name="bot_constructor")
+logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
 
 class DatabaseHandler:
@@ -36,8 +37,9 @@ class DatabaseHandler:
         """
         logging_client.info(f"Handling connect to database block for chat_id: {chat_id}")
         validate_database_data(block.get("content", {}))
-        connection_params = block.get("content", {}).get("connection_params", {})
-        db_uri = block.get("content", {}).get("db_uri")
+        content = block.get("content", {})
+        connection_params = content.get("connection_params", {})
+        db_uri = content.get("db_uri")
         
         if connection_params:
             rendered_params = {
@@ -264,7 +266,9 @@ class DatabaseHandler:
                 return None
 
             logging_client.info(f"Database insert query successful")
-            next_blocks = await self.database_repository._get_next_blocks(block.id, bot_logic)
+            from src.core.logic_manager import LogicManager
+            logic_manager = LogicManager()
+            next_blocks = await logic_manager._get_next_blocks(block.get("id"), bot_logic)
             if next_blocks:
                 return next_blocks[0].get("id")
         except Exception as e:
@@ -323,7 +327,9 @@ class DatabaseHandler:
                  return None
 
             logging_client.info(f"Database update query successful")
-            next_blocks = await self.database_repository._get_next_blocks(block.id, bot_logic)
+            from src.core.logic_manager import LogicManager
+            logic_manager = LogicManager()
+            next_blocks = await logic_manager._get_next_blocks(block.get("id"), bot_logic)
             if next_blocks:
                return next_blocks[0].get("id")
         except Exception as e:
@@ -383,7 +389,9 @@ class DatabaseHandler:
                  return None
 
            logging_client.info(f"Database delete query successful")
-           next_blocks = await self.database_repository._get_next_blocks(block.id, bot_logic)
+           from src.core.logic_manager import LogicManager
+           logic_manager = LogicManager()
+           next_blocks = await logic_manager._get_next_blocks(block.get("id"), bot_logic)
            if next_blocks:
                 return next_blocks[0].get("id")
         except Exception as e:

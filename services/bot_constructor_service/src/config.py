@@ -1,8 +1,9 @@
 import os
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, validator
 from typing import Optional
 import string
+from src.core.utils.validators import validate_bot_library
 
 
 class Settings(BaseSettings):
@@ -95,6 +96,11 @@ class Settings(BaseSettings):
     )
     ALLOWED_METHODS: list = Field(["*"], env="ALLOWED_METHODS")
     ALLOWED_HEADERS: list = Field(["*"], env="ALLOWED_HEADERS")
+
+    @validator("TELEGRAM_BOT_LIBRARY")
+    def validate_telegram_bot_library(cls, value):
+        from src.core.utils.validators import validate_bot_library
+        return validate_bot_library(value)
 
     class Config:
         env_file = ".env"  # Use a .env file to load environment variables

@@ -1,12 +1,13 @@
 from pydantic import BaseModel, Field, validator
 from typing import Any, List, Optional
-from src.core.utils.validators import validate_status  # Импорт валидатора
+
+from src.core.utils.validators import validate_status, validate_version
+
 
 class ErrorResponse(BaseModel):
     """Schema for error responses."""
-    error_code: int = Field(..., description="Error code associated with the failure")
-    message: str = Field(..., description="Error message describing the failure")
-    details: Optional[Any] = Field(None, description="Additional details about the error")
+    detail: str = Field(..., description="Error message describing the failure")
+    status_code: int = Field(..., description="HTTP status code associated with the error")
 
 
 class SuccessResponse(BaseModel):
@@ -35,7 +36,6 @@ class HealthCheckResponse(BaseModel):
 
     @validator("version")
     def validate_version_field(cls, value):
-        from src.core.utils.validators import validate_version  # Импорт валидатора
         return validate_version(value)  # Валидация версии
 
 

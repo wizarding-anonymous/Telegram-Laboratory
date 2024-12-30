@@ -12,6 +12,7 @@ from .db_router import router as db_router
 from .api_request_router import router as api_request_router
 from .bot_settings_router import router as bot_settings_router
 from .connection_router import router as connection_router
+from .media_group_router import router as media_group_router
 
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "api_request_router",
     "bot_settings_router",
     "connection_router",
+     "media_group_router",
 ]

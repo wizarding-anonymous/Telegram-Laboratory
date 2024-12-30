@@ -6,8 +6,9 @@ import re
 
 from src.integrations.logging_client import LoggingClient
 from src.core.utils.exceptions import InvalidContentException
+from src.config import settings
 
-logging_client = LoggingClient(service_name="bot_constructor")
+logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
 
 def validate_bot_id(bot_id: int) -> None:
@@ -73,7 +74,7 @@ def validate_block_type(block_type: str) -> None:
         "send_venue",
         "send_game",
         "send_poll",
-         "set_chat_title",
+        "set_chat_title",
         "set_chat_description",
         "get_chat_members",
         "ban_user",
@@ -81,10 +82,12 @@ def validate_block_type(block_type: str) -> None:
         "pin_message",
         "unpin_message",
         "create_from_template",
-          "save_user_data",
-          "retrieve_user_data",
-          "clear_user_data",
-          "manage_session"
+        "save_user_data",
+        "retrieve_user_data",
+        "clear_user_data",
+        "manage_session",
+        "media_group",
+         "flow_chart"
     ]
     if not isinstance(block_type, str) or block_type not in allowed_types:
         logger.error(f"Invalid block type: {block_type}")
@@ -242,9 +245,9 @@ def validate_state_machine_data(data: Dict[str, Any]) -> None:
   if not isinstance(data, dict):
         logger.error(f"Invalid state machine data: {data}. Must be a dictionary.")
         raise HTTPException(status_code=400, detail="Invalid state machine data. Must be a dictionary.")
-  if "initial_state" not in data or not isinstance(data['initial_state'], str) or not data['initial_state'].strip():
-       logger.error(f"Invalid state in state machine block: {data.get('initial_state')}")
-       raise HTTPException(status_code=400, detail="Invalid state in state machine block. Must be a non-empty string.")
+  if "initial_state" not in data or not isinstance(data['initial_state'], str):
+       logger.error(f"Invalid initial state in state machine block: {data.get('initial_state')}")
+       raise HTTPException(status_code=400, detail="Invalid state in state machine block. Must be a string.")
   if "transitions" not in data or not isinstance(data['transitions'], list):
        logger.error(f"Invalid transitions in state machine block: {data.get('transitions')}. Must be a list")
        raise HTTPException(status_code=400, detail="Invalid transitions in state machine block, must be a list.")
@@ -252,10 +255,10 @@ def validate_state_machine_data(data: Dict[str, Any]) -> None:
     if not isinstance(transition, dict):
       logger.error(f"Invalid transition {transition}, must be a dictionary")
       raise HTTPException(status_code=400, detail="Invalid transition, must be a dictionary")
-    if "from_state" not in transition or not isinstance(transition['from_state'], str) or not transition['from_state'].strip():
+    if "from_state" not in transition or not isinstance(transition['from_state'], str):
       logger.error(f"Invalid from state: {transition.get('from_state')}")
       raise HTTPException(status_code=400, detail="Invalid from state, must be a string")
-    if "to_state" not in transition or not isinstance(transition['to_state'], str) or not transition['to_state'].strip():
+    if "to_state" not in transition or not isinstance(transition['to_state'], str):
        logger.error(f"Invalid target state: {transition.get('to_state')}")
        raise HTTPException(status_code=400, detail="Invalid target state, must be a string")
   logging_client.debug(f"State machine data is valid")

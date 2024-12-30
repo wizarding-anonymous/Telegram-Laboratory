@@ -18,6 +18,7 @@ from src.db.repositories import BlockRepository
 from src.core.logic_manager.base import Block
 from src.integrations.telegram import TelegramClient
 from src.config import settings
+
 logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
 
@@ -31,14 +32,14 @@ class ApiRequestHandler:
     @handle_exceptions
     async def handle_api_request(
         self,
-        content: Dict[str, Any],
+        block: Dict[str, Any],
         chat_id: int,
         user_message: str,
         bot_logic: Dict[str, Any],
         variables: Dict[str, Any],
-        block: Block,
     ) -> Optional[int]:
         """Handles API request block."""
+        content = block.get("content", {})
         logging_client.info(f"Handling API request block for chat_id: {chat_id}")
         validate_api_request_data(content)
         url_template = content.get("url")
@@ -116,88 +117,6 @@ class ApiRequestHandler:
                  raise
         return None
 
-
-class DatabaseHandler:
-    """
-    Handler for processing database request blocks.
-    """
-    def __init__(self, telegram_client: TelegramClient):
-        self.telegram_client = telegram_client
-
-    @handle_exceptions
-    async def handle_database_connect(self, content: Dict[str, Any], chat_id: int, variables: Dict[str,Any], block: Block) -> None:
-         """Handles database connect block."""
-         logging_client.info(f"Handling database connect block for chat_id: {chat_id}")
-         validate_database_data(content)
-         # For now just log the event
-         connection_params = content.get("connection_params", {})
-         rendered_params = {
-             k: get_template(str(v)).render(variables=variables)
-             for k, v in connection_params.items()
-         }
-         logging_client.info(f"Connecting to database with params {rendered_params}")
-         return None
-    
-    @handle_exceptions
-    async def handle_database_query(
-        self,
-        content: Dict[str, Any],
-        chat_id: int,
-        user_message: str,
-        bot_logic: Dict[str, Any],
-        variables: Dict[str, Any],
-         block: Block,
-    ) -> Optional[int]:
-        """Handles database request block."""
-        logging_client.info(f"Handling database request block for chat_id: {chat_id}. User message was: {user_message}")
-        validate_database_data(content)
-        query_template = content.get("query")
-        if not query_template:
-            logging_client.warning("Database query not defined for database block")
-            return None
-        query = get_template(query_template).render(variables=variables)
-        logging_client.info(f"Executing database query: {query}")
-        async with get_session() as session:
-            try:
-                db_params = content.get("params", {})
-                rendered_params = {
-                    k: get_template(str(v)).render(variables=variables)
-                    for k, v in db_params.items()
-                }
-                sql_query = text(query)
-                result = await session.execute(sql_query, rendered_params)
-                await session.commit()
-                if result.rowcount > 0:
-                    rows = result.fetchall()
-                    formatted_result = [dict(row) for row in rows]
-                    logging_client.info(f"Database query successful, result: {formatted_result}")
-                    response_block_id = content.get("response_block_id")
-                    if response_block_id:
-                        from src.core.logic_manager.base import Block
-                        from src.core.logic_manager import LogicManager
-                        logic_manager = LogicManager()
-                        from src.db.repositories import BlockRepository
-                        block_repository = BlockRepository()
-                        response_block = await block_repository.get_by_id(response_block_id)
-                        if response_block:
-                           await logic_manager._process_block(
-                                  Block(**response_block.model_dump()),
-                                  chat_id,
-                                   str({"result": formatted_result}),
-                                   bot_logic,
-                                   variables,
-                               )
-                           return None
-                        else:
-                           logging_client.warning(
-                              f"Response block with id: {response_block_id} was not found"
-                            )
-                else:
-                    logging_client.info("Database query successful, no results found.")
-            except Exception as e:
-                logging_client.error(f"Database query failed: {e}")
-        return None
-
 class WebhookHandler:
     """
     Handler for processing webhook blocks.
@@ -206,9 +125,10 @@ class WebhookHandler:
         self.telegram_client = telegram_client
 
     @handle_exceptions
-    async def handle_set_webhook(self, content: Dict[str, Any], chat_id: int, variables: Dict[str,Any], bot_token: str) -> None:
+    async def handle_set_webhook(self, block: Dict[str, Any], chat_id: int, variables: Dict[str,Any], bot_token: str) -> None:
         """Handles webhook block."""
-        logging_client.info(f"Handling webhook block for chat_id: {chat_id}")
+        logging_client.info(f"Handling set webhook block for chat_id: {chat_id}")
+        content = block.get("content", {})
         url_template = content.get("url")
         if not url_template:
             logging_client.warning("Webhook url was not defined in webhook block")
@@ -225,7 +145,7 @@ class WebhookHandler:
             raise
     
     @handle_exceptions
-    async def handle_delete_webhook(self, content: Dict[str, Any], chat_id: int, variables: Dict[str,Any], bot_token: str) -> None:
+    async def handle_delete_webhook(self, block: Dict[str, Any], chat_id: int, variables: Dict[str,Any], bot_token: str) -> None:
         """Handles webhook block."""
         logging_client.info(f"Handling delete webhook block for chat_id: {chat_id}")
         try:

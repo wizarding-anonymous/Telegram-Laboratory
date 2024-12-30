@@ -14,6 +14,7 @@ from .db_controller import DbController
 from .api_request_controller import ApiRequestController
 from .bot_settings_controller import BotSettingsController
 from .connection_controller import ConnectionController
+from .media_group_controller import MediaGroupController
 
 __all__ = [
     "BotController",
@@ -30,4 +31,5 @@ __all__ = [
     "ApiRequestController",
     "BotSettingsController",
     "ConnectionController",
+     "MediaGroupController",
 ]
