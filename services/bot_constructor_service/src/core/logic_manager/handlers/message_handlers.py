@@ -1,14 +1,15 @@
-# src/core/logic_manager/handlers/message_handlers.py
 from typing import Any, Dict, Optional
+
 from src.core.logic_manager.utils import get_template
 from src.integrations.logging_client import LoggingClient
 from src.integrations.telegram import TelegramClient
 from src.core.logic_manager.base import Block
+from src.core.utils.validators import validate_content
 
 logging_client = LoggingClient(service_name="bot_constructor")
 
 
-async def _handle_text_message(
+async def handle_text_message_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -31,7 +32,7 @@ async def _handle_text_message(
         else:
             logging_client.info("User message does not match with content")
 
-async def _handle_send_text(
+async def handle_send_text_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -41,15 +42,17 @@ async def _handle_send_text(
 ) -> None:
     """Handles sending a text message block."""
     logging_client.info(f"Handling send text block for chat_id: {chat_id}")
+    validate_content(content)
     text_template = content.get("text")
     if text_template:
         text = get_template(text_template).render(variables)
         logging_client.info(
             f"Sending text message: {text} to chat_id: {chat_id}"
         )
-        await TelegramClient().send_message(chat_id, text)
+        telegram_client = TelegramClient()
+        await telegram_client.send_message(chat_id, text)
 
-async def _handle_media_message(
+async def handle_media_message_block(
         content: Dict[str, Any],
         chat_id: int,
         user_message: str,
@@ -58,6 +61,7 @@ async def _handle_media_message(
          block: Block,
     ) -> None:
         """Handles various media message blocks."""
+        logging_client.info(f"Handling media message block for chat_id: {chat_id}")
         media_type = content.get("type")  # e.g., 'photo', 'video', etc.
         if not media_type:
             logging_client.warning("Media type not defined in media message block")
@@ -71,7 +75,7 @@ async def _handle_media_message(
             )
         # Дополнительная логика обработки медиа, если требуется
 
-async def _handle_location_message(
+async def handle_location_message_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -90,7 +94,7 @@ async def _handle_location_message(
             f"Location received latitude: {latitude}, longitude: {longitude}"
         )
 
-async def _handle_contact_message(
+async def handle_contact_message_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -107,7 +111,7 @@ async def _handle_contact_message(
             f"User sent contact with number: {phone_number}"
         )
 
-async def _handle_venue_message(
+async def handle_venue_message_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -124,7 +128,7 @@ async def _handle_venue_message(
             f"User sent venue with address: {address}"
         )
 
-async def _handle_game_message(
+async def handle_game_message_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -141,7 +145,7 @@ async def _handle_game_message(
             f"User sent game with short name: {game_short_name}"
         )
 
-async def _handle_poll_message(
+async def handle_poll_message_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -161,11 +165,12 @@ async def _handle_poll_message(
         logging_client.info(
             f"Sending poll with question: {question} and options: {parsed_options} to chat_id: {chat_id}"
         )
-        await TelegramClient().send_poll(
+        telegram_client = TelegramClient()
+        await telegram_client.send_poll(
             chat_id, question, parsed_options
         )
 
-async def _handle_send_media(
+async def handle_send_media_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -174,6 +179,7 @@ async def _handle_send_media(
      block: Block,
 ) -> None:
     """Handles sending various media types."""
+    logging_client.info(f"Handling send media block for chat_id: {chat_id}")
     media_type = content.get("media_type", "photo")
     media_url_template = content.get(f"{media_type}_url")
     caption_template = content.get("caption", "")
@@ -183,9 +189,19 @@ async def _handle_send_media(
         logging_client.info(
             f"Sending {media_type} with url: {media_url} to chat_id: {chat_id}"
         )
-        await TelegramClient().send_media(chat_id, media_url, caption, media_type)
+        telegram_client = TelegramClient()
+        if media_type == "photo":
+            await telegram_client.send_photo(chat_id, media_url, caption)
+        elif media_type == "video":
+            await telegram_client.send_video(chat_id, media_url, caption)
+        elif media_type == "audio":
+            await telegram_client.send_audio(chat_id, media_url, caption)
+        elif media_type == "document":
+             await telegram_client.send_document(chat_id, media_url, caption)
+        elif media_type == "sticker":
+            await telegram_client.send_sticker(chat_id, media_url)
 
-async def _handle_send_location(
+async def handle_send_location_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -203,11 +219,12 @@ async def _handle_send_location(
         logging_client.info(
             f"Sending location latitude: {latitude} and longitude: {longitude} to chat_id: {chat_id}"
         )
-        await TelegramClient().send_location(
+        telegram_client = TelegramClient()
+        await telegram_client.send_location(
             chat_id, float(latitude), float(longitude)
         )
 
-async def _handle_send_contact(
+async def handle_send_contact_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -227,11 +244,12 @@ async def _handle_send_contact(
         logging_client.info(
             f"Sending contact with number: {phone_number} to chat_id: {chat_id}"
         )
-        await TelegramClient().send_contact(
+        telegram_client = TelegramClient()
+        await telegram_client.send_contact(
             chat_id, phone_number, first_name, last_name=last_name
         )
 
-async def _handle_send_venue(
+async def handle_send_venue_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -253,11 +271,12 @@ async def _handle_send_venue(
         logging_client.info(
             f"Sending venue with address: {address}, latitude: {latitude} and longitude: {longitude} to chat_id: {chat_id}"
         )
-        await TelegramClient().send_venue(
+        telegram_client = TelegramClient()
+        await telegram_client.send_venue(
             chat_id, float(latitude), float(longitude), title, address
         )
 
-async def _handle_send_game(
+async def handle_send_game_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -273,9 +292,10 @@ async def _handle_send_game(
         logging_client.info(
             f"Sending game with short name: {game_short_name} to chat_id: {chat_id}"
         )
-        await TelegramClient().send_game(chat_id, game_short_name)
+        telegram_client = TelegramClient()
+        await telegram_client.send_game(chat_id, game_short_name)
 
-async def _handle_send_poll(
+async def handle_send_poll_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -295,6 +315,7 @@ async def _handle_send_poll(
         logging_client.info(
             f"Sending poll with question: {question} and options: {parsed_options} to chat_id: {chat_id}"
         )
-        await TelegramClient().send_poll(
+        telegram_client = TelegramClient()
+        await telegram_client.send_poll(
             chat_id, question, parsed_options
         )

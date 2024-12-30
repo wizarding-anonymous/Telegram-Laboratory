@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 import re
 
 from src.integrations.logging_client import LoggingClient
+from src.core.utils.exceptions import InvalidContentException
 
 logging_client = LoggingClient(service_name="bot_constructor")
 
@@ -32,16 +33,6 @@ def validate_block_type(block_type: str) -> None:
     allowed_types = [
         "text_message",
         "send_text",
-        "send_photo",
-        "send_video",
-        "send_audio",
-        "send_document",
-        "send_location",
-        "send_sticker",
-        "send_contact",
-        "send_venue",
-        "send_game",
-        "send_poll",
         "keyboard",
         "if_condition",
         "loop",
@@ -58,7 +49,27 @@ def validate_block_type(block_type: str) -> None:
         "state_machine",
         "custom_filter",
         "rate_limiting",
-        "start"
+        "start",
+        "photo_message",
+        "video_message",
+        "audio_message",
+        "document_message",
+        "location_message",
+        "sticker_message",
+        "contact_message",
+        "venue_message",
+        "game_message",
+        "poll_message",
+        "send_photo",
+        "send_video",
+        "send_audio",
+        "send_document",
+        "send_location",
+        "send_sticker",
+        "send_contact",
+        "send_venue",
+        "send_game",
+        "send_poll",
     ]
     if not isinstance(block_type, str) or block_type not in allowed_types:
         logger.error(f"Invalid block type: {block_type}")
@@ -261,3 +272,38 @@ def validate_rate_limiting_data(data: Dict[str, Any]) -> None:
          logger.error(f"Invalid interval in rate limiting block: {data.get('interval')}")
          raise HTTPException(status_code=400, detail="Invalid interval in rate limiting block, must be int or string")
     logging_client.debug(f"Rate limiting data is valid")
+
+def validate_keyboard_data(data: Dict[str, Any]) -> None:
+    """Validates keyboard data."""
+    if not isinstance(data, dict):
+        logger.error(f"Invalid keyboard data: {data}. Must be a dictionary.")
+        raise HTTPException(status_code=400, detail="Invalid keyboard data. Must be a dictionary.")
+    if "buttons" not in data or not isinstance(data["buttons"], list):
+          logger.error(f"Invalid buttons data: {data.get('buttons')}. Must be a list")
+          raise HTTPException(status_code=400, detail="Invalid buttons, must be a list")
+    if "keyboard_type" not in data or not isinstance(data["keyboard_type"], str) or data["keyboard_type"] not in ['reply', 'inline']:
+        logger.error(f"Invalid keyboard type: {data.get('keyboard_type')}. Must be 'reply' or 'inline'")
+        raise HTTPException(status_code=400, detail="Invalid keyboard type. Must be 'reply' or 'inline'")
+
+    for row in data["buttons"]:
+         if not isinstance(row, list):
+             logger.error(f"Invalid keyboard row: {row}. Must be a list.")
+             raise HTTPException(status_code=400, detail="Invalid keyboard row. Must be a list.")
+         for button in row:
+            if not isinstance(button, dict):
+                logger.error(f"Invalid button data: {button}. Must be a dict.")
+                raise HTTPException(status_code=400, detail="Invalid button data. Must be a dict.")
+            if "text" not in button or not isinstance(button["text"], str) or not button["text"].strip():
+                 logger.error(f"Invalid button text: {button.get('text')}")
+                 raise HTTPException(status_code=400, detail="Invalid button text. Must be a non-empty string")
+    logging_client.debug(f"Keyboard data is valid")
+    
+def validate_callback_data(data: Dict[str, Any]) -> None:
+    """Validates callback query data."""
+    if not isinstance(data, dict):
+        logger.error(f"Invalid callback data: {data}. Must be a dictionary.")
+        raise HTTPException(status_code=400, detail="Invalid callback data. Must be a dictionary")
+    if "callback_data" not in data or not isinstance(data["callback_data"], str) or not data["callback_data"].strip():
+        logger.error(f"Invalid callback data: {data.get('callback_data')}")
+        raise HTTPException(status_code=400, detail="Invalid callback data. Must be a non-empty string.")
+    logging_client.debug(f"Callback data is valid.")

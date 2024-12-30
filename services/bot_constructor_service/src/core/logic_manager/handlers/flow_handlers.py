@@ -1,4 +1,3 @@
-# src/core/logic_manager/handlers/flow_handlers.py
 from typing import Any, Dict
 
 from src.core.logic_manager.utils import get_template
@@ -12,7 +11,7 @@ logging_client = LoggingClient(service_name="bot_constructor")
 auth_service = AuthService()
 block_repository = BlockRepository()
 
-async def _handle_if_condition(
+async def handle_if_condition_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -38,7 +37,7 @@ async def _handle_if_condition(
             )
             # Do nothing, skip next blocks as the condition is not met.
 
-async def _handle_loop_block(
+async def handle_loop_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -113,7 +112,7 @@ async def _handle_loop_block(
             logging_client.warning(f"While loop requires condition in {block.id}")
 
 
-async def _handle_state_machine_block(
+async def handle_state_machine_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,

@@ -4,11 +4,12 @@ from src.core.logic_manager.utils import get_template
 from src.integrations.logging_client import LoggingClient
 from src.integrations.telegram import TelegramClient
 from src.core.logic_manager.base import Block
+from src.core.utils.validators import validate_keyboard_data, validate_callback_data
 
 logging_client = LoggingClient(service_name="bot_constructor")
 
 
-async def _handle_keyboard_block(
+async def handle_keyboard_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -18,6 +19,7 @@ async def _handle_keyboard_block(
 ) -> None:
     """Handles keyboard block."""
     logging_client.info(f"Handling keyboard block for chat_id: {chat_id}")
+    validate_keyboard_data(content)
     keyboard_type = content.get("keyboard_type")
     buttons = content.get("buttons")
     if keyboard_type and buttons:
@@ -29,20 +31,22 @@ async def _handle_keyboard_block(
                     rendered_text = get_template(button["text"]).render(variables)
                     rendered_row.append({
                         "text": rendered_text,
-                        "callback_data": button.get("callback_data")
+                        "callback_data": button.get("callback_data"),
+                        "url": button.get("url")
                     })
                 else:
                     rendered_row.append(button)
             rendered_buttons.append(rendered_row)
 
+        telegram_client = TelegramClient()
         if keyboard_type == "reply":
-            await TelegramClient().send_message(
+            await telegram_client.send_message(
                 chat_id,
                 "Please select option:",
                 reply_markup=rendered_buttons
             )
         elif keyboard_type == "inline":
-            await TelegramClient().send_message(
+            await telegram_client.send_message(
                 chat_id,
                 "Please select option:",
                 inline_keyboard=rendered_buttons
@@ -50,7 +54,8 @@ async def _handle_keyboard_block(
         else:
             logging_client.warning(f"Unsupported keyboard type: {keyboard_type}")
 
-async def _handle_callback_block(
+
+async def handle_callback_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -60,6 +65,7 @@ async def _handle_callback_block(
 ) -> None:
     """Handles callback block."""
     logging_client.info(f"Handling callback block for chat_id: {chat_id}")
+    validate_callback_data(content)
     callback_data_template = content.get("callback_data")
     if not callback_data_template:
         logging_client.warning("Callback data was not defined in callback block")

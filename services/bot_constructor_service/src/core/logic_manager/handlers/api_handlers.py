@@ -5,17 +5,18 @@ import httpx
 from fastapi import HTTPException
 from sqlalchemy import text
 
-from src.core.utils.validators import validate_api_request_data, validate_database_data
+from src.core.utils.validators import validate_api_request_data, validate_database_data, validate_webhook_url
 from src.core.logic_manager.utils import get_template
 from src.integrations.logging_client import LoggingClient
 from src.db.database import get_session
 from src.db.repositories import BlockRepository
 from src.core.logic_manager.base import Block
+from src.integrations.telegram import TelegramClient
 
 logging_client = LoggingClient(service_name="bot_constructor")
 block_repository = BlockRepository()
 
-async def _handle_api_request_block(
+async def handle_api_request_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -88,7 +89,7 @@ async def _handle_api_request_block(
         except Exception as e:
             logging_client.error(f"API request failed: {e}")
 
-async def _handle_database_block(
+async def handle_database_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -146,7 +147,7 @@ async def _handle_database_block(
         except Exception as e:
             logging_client.error(f"Database query failed: {e}")
 
-async def _handle_webhook_block(
+async def handle_webhook_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -162,16 +163,12 @@ async def _handle_webhook_block(
         return
 
     url = get_template(url_template).render(variables)
+    validate_webhook_url(url)
     logging_client.info(f"Sending webhook to url: {url}")
     try:
-         from src.integrations.telegram import TelegramClient
          telegram_client = TelegramClient()
-         response = await telegram_client.make_api_request(
-            url=url,
-            method="POST",
-            json={"chat_id": chat_id},
-        )
-         response.raise_for_status()
-         logging_client.info(f"Webhook was sent successfully, response: {response}")
+         await telegram_client.set_webhook(url=url)
+
+         logging_client.info(f"Webhook was set successfully, url: {url}")
     except Exception as e:
-        logging_client.error(f"Webhook was not sent, error: {e}")
+        logging_client.error(f"Webhook was not set, error: {e}")

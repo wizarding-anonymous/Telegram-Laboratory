@@ -1,5 +1,3 @@
-# services\bot_constructor_service\src\core\flow_chart.py
-# src/core/flow_chart.py
 from typing import Dict, Any, List
 from fastapi import HTTPException
 from loguru import logger
@@ -36,7 +34,7 @@ class FlowChartManager:
         logging_client.info(f"Flow chart for bot_id: {bot_id} built successfully")
         return flow_chart
 
-    def _build_flow_chart(self, blocks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_flow_chart(self, blocks: List[Any]) -> Dict[str, Any]:
         """Builds a flow chart representation from the provided blocks."""
         logging_client.info("Building flow chart from blocks")
         

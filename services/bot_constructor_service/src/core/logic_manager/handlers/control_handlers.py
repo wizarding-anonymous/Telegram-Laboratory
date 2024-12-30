@@ -1,7 +1,7 @@
 from typing import Any, Dict
 
 from fastapi import HTTPException
-from src.core.utils.validators import validate_variable_data, validate_timer_data, validate_rate_limiting_data
+from src.core.utils.validators import validate_variable_data, validate_timer_data, validate_rate_limiting_data, validate_custom_filter_data
 from src.core.logic_manager.utils import get_template
 from src.integrations.logging_client import LoggingClient
 from src.integrations.redis_client import redis_client
@@ -11,7 +11,7 @@ import asyncio
 logging_client = LoggingClient(service_name="bot_constructor")
 
 
-async def _handle_variable_block(
+async def handle_variable_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -76,7 +76,7 @@ async def _handle_variable_block(
     else:
         logging_client.warning(f"Unsupported variable action: {action}")
 
-async def _handle_try_catch_block(
+async def handle_try_catch_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -112,7 +112,7 @@ async def _handle_try_catch_block(
             return
 
 
-async def _handle_raise_error_block(
+async def handle_raise_error_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -131,7 +131,7 @@ async def _handle_raise_error_block(
         logging_client.warning("Error message was not provided")
 
 
-async def _handle_handle_exception_block(
+async def handle_handle_exception_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -157,7 +157,7 @@ async def _handle_handle_exception_block(
         logging_client.warning("Exception block was not defined")
         return
 
-async def _handle_log_message(
+async def handle_log_message_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -189,7 +189,7 @@ async def _handle_log_message(
         logging_client.warning("Log message or level was not provided")
 
 
-async def _handle_timer_block(
+async def handle_timer_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -232,7 +232,7 @@ async def _handle_timer_block(
         return
 
 
-async def _handle_custom_filter_block(
+async def handle_custom_filter_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,
@@ -274,7 +274,7 @@ async def _handle_custom_filter_block(
     else:
         logging_client.warning("Custom filter was not defined")
 
-async def _handle_rate_limiting_block(
+async def handle_rate_limiting_block(
     content: Dict[str, Any],
     chat_id: int,
     user_message: str,

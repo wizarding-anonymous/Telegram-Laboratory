@@ -4,6 +4,7 @@ from loguru import logger
 
 from src.core.utils import handle_exceptions
 from src.integrations.logging_client import LoggingClient
+from src.core.utils.exceptions import TemplateNotFoundException
 
 logging_client = LoggingClient(service_name="bot_constructor")
 
@@ -22,7 +23,8 @@ class TemplateManager:
                 "name": "Greeting Bot",
                 "description": "A simple bot that greets the user.",
                 "logic": {
-                    "start_block": 1,
+                    "start_block_id": 1,
+                    "connections": [],
                     "blocks": {
                         1: {
                             "type": "send_text",
@@ -41,8 +43,9 @@ class TemplateManager:
                 "name": "Poll Bot",
                 "description": "A bot that allows user to create polls.",
                 "logic": {
-                    "start_block": 1,
-                    "blocks": {
+                     "start_block_id": 1,
+                     "connections": [],
+                     "blocks": {
                         1: {
                             "type": "send_text",
                              "content": {"text": "Create poll with text"},
@@ -57,7 +60,11 @@ class TemplateManager:
                             "type": "keyboard",
                             "content": {
                                 "keyboard_type": "reply",
-                                "buttons": ["Red", "Green", "Blue"]
+                                "buttons": [
+                                     [{"text":"Red"}], 
+                                     [{"text":"Green"}], 
+                                     [{"text":"Blue"}]
+                                    ]
                             },
                             "connections": []
                         }
@@ -68,7 +75,8 @@ class TemplateManager:
                 "name": "Inline Query Bot",
                 "description": "A bot that handles inline queries.",
                  "logic":{
-                    "start_block": 1,
+                    "start_block_id": 1,
+                     "connections": [],
                     "blocks":{
                         1:{
                              "type": "handle_inline_query",
@@ -95,7 +103,8 @@ class TemplateManager:
                 "name": "Basic Poll Bot",
                 "description": "A bot that creates poll.",
                  "logic":{
-                    "start_block": 1,
+                    "start_block_id": 1,
+                     "connections":[],
                     "blocks":{
                         1:{
                             "type": "send_poll",
@@ -121,7 +130,7 @@ class TemplateManager:
         if template_id not in self.templates:
              logger.warning(f"Template with id: {template_id} not found")
              logging_client.warning(f"Template with id: {template_id} not found")
-             raise HTTPException(status_code=404, detail="Template not found")
+             raise TemplateNotFoundException(template_id=template_id)
 
         template = self.templates.get(template_id)
         logger.info(f"Template with id: {template_id} retrieved successfully")
@@ -151,7 +160,7 @@ class TemplateManager:
         if template_id not in self.templates:
              logger.warning(f"Template with id: {template_id} not found")
              logging_client.warning(f"Template with id: {template_id} not found")
-             raise HTTPException(status_code=404, detail="Template not found")
+             raise TemplateNotFoundException(template_id=template_id)
 
         self.templates[template_id] = template_data
         logger.info(f"Template with id: {template_id} updated successfully")
@@ -166,7 +175,7 @@ class TemplateManager:
         if template_id not in self.templates:
             logger.warning(f"Template with id: {template_id} not found")
             logging_client.warning(f"Template with id: {template_id} not found")
-            raise HTTPException(status_code=404, detail="Template not found")
+            raise TemplateNotFoundException(template_id=template_id)
 
         del self.templates[template_id]
         logger.info(f"Template with id: {template_id} deleted successfully")

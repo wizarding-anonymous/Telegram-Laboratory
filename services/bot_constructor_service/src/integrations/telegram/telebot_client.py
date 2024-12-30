@@ -1,4 +1,3 @@
-# src/integrations/telegram/telebot_client.py
 from typing import Any, Dict, List, Optional
 import telebot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
