@@ -25,11 +25,11 @@ from src.core.utils.validators import (
 )
 from src.db.database import get_session
 from src.db.repositories import BlockRepository, BotRepository
-from src.integrations.auth_service import AuthService, get_current_user
+from src.integrations import AuthService, get_current_user, get_telegram_client
 from src.integrations.logging_client import LoggingClient
 from src.integrations.redis_client import redis_client
-from src.integrations.telegram import TelegramClient, get_telegram_client
 from dataclasses import dataclass, field
+from src.config import settings
 
 
 @dataclass
@@ -50,14 +50,13 @@ class LogicManager:
         block_repository: BlockRepository = Depends(),
         bot_repository: BotRepository = Depends(),
         auth_service: AuthService = Depends(),
-        session: AsyncSession = Depends(get_session)
-
+        session: AsyncSession = Depends(get_session),
     ):
         self.block_repository = block_repository
         self.bot_repository = bot_repository
         self.auth_service = auth_service
         self.template_env = Environment(loader=BaseLoader())
-        self.logging_client = LoggingClient(service_name="bot_constructor")
+        self.logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
         self.http_client = httpx.AsyncClient()
         self.session = session
         from src.core.logic_manager.handlers import (
@@ -71,16 +70,19 @@ class LogicManager:
             template_handlers,
             user_handlers,
             error_handlers,
+             polling_handlers,
+            media_group_handlers
         )
         self.handlers: Dict[str, Callable[..., Any]] = {
             "text_message": message_handlers.TextMessageBlockHandler(self.telegram_client).handle_text_message,
             "send_text": message_handlers.TextMessageBlockHandler(self.telegram_client).handle_send_text,
             "keyboard": keyboard_handlers.KeyboardHandler(self.telegram_client).handle_keyboard,
-            "if_condition": flow_handlers.FlowChartManager(self.telegram_client).handle_if_condition,
-             "loop": flow_handlers.FlowChartManager(self.telegram_client).handle_loop,
+            "if_condition": flow_handlers.FlowHandler().handle_if_condition,
+             "loop": flow_handlers.FlowHandler().handle_loop_block,
+              "switch_case": flow_handlers.FlowHandler().handle_switch_case,
              "api_request": api_handlers.ApiRequestHandler(self.telegram_client).handle_api_request,
-            "database_connect": api_handlers.DatabaseHandler(self.telegram_client).handle_database_connect,
-            "database_query": api_handlers.DatabaseHandler(self.telegram_client).handle_database_query,
+            "database_connect": db_handlers.DatabaseHandler(self.session).handle_database_connect,
+            "database_query": db_handlers.DatabaseHandler(self.session).handle_database_query,
             "set_webhook": api_handlers.WebhookHandler(self.telegram_client).handle_set_webhook,
             "delete_webhook": api_handlers.WebhookHandler(self.telegram_client).handle_delete_webhook,
             "handle_callback_query": callback_handlers.CallbackHandler(self.telegram_client).handle_callback_query,
@@ -111,8 +113,8 @@ class LogicManager:
             "handle_exception": control_handlers.ControlHandler().handle_handle_exception_block,
             "log_message": control_handlers.ControlHandler().handle_log_message_block,
             "timer": control_handlers.ControlHandler().handle_timer_block,
-            "state_machine": flow_handlers.FlowChartManager(self.telegram_client).handle_state_machine,
-            "custom_filter": flow_handlers.FlowChartManager(self.telegram_client).handle_custom_filter,
+            "state_machine": flow_handlers.FlowHandler().handle_state_machine_block,
+            "custom_filter": flow_handlers.FlowHandler().handle_custom_filter_block,
             "rate_limiting": control_handlers.ControlHandler().handle_rate_limiting_block,
             "get_chat_members": chat_handlers.ChatHandler(self.telegram_client).handle_get_chat_members,
             "ban_user": chat_handlers.ChatHandler(self.telegram_client).handle_ban_user,
@@ -126,6 +128,9 @@ class LogicManager:
              "retrieve_user_data": user_handlers.UserHandler().handle_retrieve_user_data,
              "clear_user_data": user_handlers.UserHandler().handle_clear_user_data,
              "manage_session": user_handlers.UserHandler().handle_manage_session,
+            "media_group": media_group_handlers.MediaGroupHandler(self.telegram_client).handle_media_group,
+           "start_polling": polling_handlers.PollingHandler(self.telegram_client).handle_start_polling,
+            "stop_polling": polling_handlers.PollingHandler(self.telegram_client).handle_stop_polling,
         }
 
     async def close(self):
@@ -152,7 +157,6 @@ class LogicManager:
            self.logging_client.warning(f"User: {user['id']} does not have permission to execute bot logic")
            raise HTTPException(status_code=403, detail="Permission denied")
         
-
         bot_logic = bot.logic
         start_block_id = bot_logic.get("start_block_id")
         if not start_block_id:
@@ -169,7 +173,7 @@ class LogicManager:
                 f"Start block with id: {start_block_id} not found for bot_id: {bot_id}"
             )
             raise BlockNotFoundException(block_id=start_block_id)
-
+        
         telegram_client = get_telegram_client(bot.library)
         self.telegram_client = telegram_client
         
@@ -218,25 +222,22 @@ class LogicManager:
                   next_block = await self.block_repository.get_by_id(next_block_id)
                   if next_block:
                      return await self._process_block(Block(**next_block.model_dump()), chat_id, user_message, bot_logic, variables)
-
+                  else:
+                      self.logging_client.warning(f"Next block with id {next_block_id} not found")
         else:
             self.logging_client.warning(f"Unsupported block type: {block.type}")
             return None
 
         next_blocks = await self._get_next_blocks(block.id, bot_logic)
         if next_blocks:
-            await asyncio.gather(
-                *[
-                    self._process_block(
-                        Block(**next_block.model_dump()),
-                        chat_id,
-                        user_message,
-                        bot_logic,
-                        variables,
-                    )
-                    for next_block in next_blocks
-                ]
-            )
+            for next_block in next_blocks:
+                await self._process_block(
+                    Block(**next_block.model_dump()),
+                    chat_id,
+                    user_message,
+                    bot_logic,
+                    variables,
+                )
         self.logging_client.info(
             f"Finished processing block with id: {block.id}, type: {block.type}"
         )
@@ -254,7 +255,7 @@ class LogicManager:
     ) -> Optional[int]:
         """Safely executes a handler with exception handling."""
         try:
-            return await handler(content, chat_id, variables, bot_logic, block, user_message)
+            return await handler(block=block.model_dump(), content=content, chat_id=chat_id, variables=variables, bot_logic=bot_logic, user_message=user_message)
         except HTTPException as he:
             self.logging_client.error(
                 f"HTTPException in block {block.id}: {he.detail}"
@@ -276,7 +277,6 @@ class LogicManager:
     ) -> List[Block]:
         """Retrieves next blocks based on connections."""
         self.logging_client.info(f"Retrieving next blocks for block id: {block_id}")
-
         connections = bot_logic.get("connections", [])
         next_block_ids = [
             connection.get("target_block_id")

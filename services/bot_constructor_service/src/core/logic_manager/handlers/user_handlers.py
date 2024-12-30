@@ -14,6 +14,9 @@ class UserHandler:
     Handler for processing user-related blocks.
     """
 
+    def __init__(self):
+        pass
+
     @handle_exceptions
     async def handle_save_user_data(
         self, block: Dict[str, Any], chat_id: int, variables: Dict[str, Any]

@@ -5,6 +5,7 @@ from loguru import logger
 
 from src.integrations.telegram.client import TelegramClient
 from src.core.utils.exceptions import TelegramAPIException
+from src.core.utils import handle_exceptions
 
 
 class TelebotClient(TelegramClient):
@@ -17,15 +18,19 @@ class TelebotClient(TelegramClient):
         self.bot = telebot.TeleBot(self.bot_token, parse_mode="HTML")
         logger.info("TelebotClient initialized")
     
-    async def validate_token(self, token: str) -> bool:
+    @handle_exceptions
+    async def check_connection(self, bot_token: str = None) -> bool:
         """
         Validate telegram token using telebot.
         Args:
-           token(str): Token for telegram bot.
+           bot_token(str): Token for telegram bot.
+          Returns:
+            bool: true if connection successful, otherwise false
         """
+        token = bot_token or self.bot_token
         try:
             bot = telebot.TeleBot(token)
-            bot_info = await bot.get_me()
+            bot_info = await asyncio.to_thread(bot.get_me)
             if bot_info:
                 logger.info(f"Telebot token is valid for user: {bot_info.username}")
                 return True
@@ -34,9 +39,10 @@ class TelebotClient(TelegramClient):
                  return False
         except Exception as e:
               logger.error(f"Telebot token is invalid, exception: {e}")
-              raise TelegramAPIException(detail=f"Telebot token is invalid: {e}")
-
-    async def send_message(self, chat_id: int, text: str, parse_mode: str = "HTML", reply_markup: Optional[Any] = None, inline_keyboard: Optional[Any] = None) -> dict:
+              return False
+    
+    @handle_exceptions
+    async def send_message(self, chat_id: int, text: str, parse_mode: str = "HTML", reply_markup: Optional[List[List[str]]] = None, inline_keyboard: Optional[List[List[Dict[str, Any]]]] = None) -> dict:
         """
         Send a message to a Telegram chat using telebot.
 
@@ -54,20 +60,21 @@ class TelebotClient(TelegramClient):
                 keyboard = ReplyKeyboardMarkup(row_width=3, resize_keyboard=True, one_time_keyboard=True)
                 for row in reply_markup:
                     keyboard.add(*[KeyboardButton(text=button) for button in row])
-                sent_message = await self.bot.send_message(chat_id, text, parse_mode=parse_mode, reply_markup=keyboard)
+                sent_message = await asyncio.to_thread(self.bot.send_message, chat_id, text, parse_mode=parse_mode, reply_markup=keyboard)
             elif inline_keyboard:
                 keyboard = InlineKeyboardMarkup(row_width=3)
                 for row in inline_keyboard:
                     keyboard.add(*[InlineKeyboardButton(text=button["text"], callback_data=button["callback_data"]) for button in row])
-                sent_message = await self.bot.send_message(chat_id, text, parse_mode=parse_mode, reply_markup=keyboard)
+                sent_message = await asyncio.to_thread(self.bot.send_message, chat_id, text, parse_mode=parse_mode, reply_markup=keyboard)
             else:
-                sent_message = await self.bot.send_message(chat_id, text, parse_mode=parse_mode)
+                sent_message = await asyncio.to_thread(self.bot.send_message, chat_id, text, parse_mode=parse_mode)
             logger.info(f"Message sent to chat {chat_id}: {text}")
             return sent_message.json
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
             raise TelegramAPIException(detail=f"Failed to send message: {e}")
     
+    @handle_exceptions
     async def send_photo(self, chat_id: int, photo_url: str, caption: Optional[str] = None) -> dict:
          """
          Sends a photo to a Telegram chat using telebot.
@@ -81,13 +88,14 @@ class TelebotClient(TelegramClient):
              dict: Response from the Telegram API.
          """
          try:
-            sent_message = await self.bot.send_photo(chat_id, photo_url, caption=caption)
+            sent_message = await asyncio.to_thread(self.bot.send_photo, chat_id, photo_url, caption=caption)
             logger.info(f"Photo sent to chat {chat_id}: {photo_url}")
             return sent_message.json
          except Exception as e:
             logger.error(f"Failed to send photo: {e}")
             raise TelegramAPIException(detail=f"Failed to send photo: {e}")
 
+    @handle_exceptions
     async def send_video(self, chat_id: int, video_url: str, caption: Optional[str] = None) -> dict:
          """
          Sends a video to a Telegram chat using telebot.
@@ -101,7 +109,7 @@ class TelebotClient(TelegramClient):
              dict: Response from the Telegram API.
          """
          try:
-            sent_message = await self.bot.send_video(chat_id, video_url, caption=caption)
+            sent_message = await asyncio.to_thread(self.bot.send_video, chat_id, video_url, caption=caption)
             logger.info(f"Video sent to chat {chat_id}: {video_url}")
             return sent_message.json
          except Exception as e:
@@ -122,7 +130,7 @@ class TelebotClient(TelegramClient):
              dict: Response from the Telegram API.
          """
          try:
-            sent_message = await self.bot.send_audio(chat_id, audio_url, caption=caption)
+            sent_message = await asyncio.to_thread(self.bot.send_audio, chat_id, audio_url, caption=caption)
             logger.info(f"Audio sent to chat {chat_id}: {audio_url}")
             return sent_message.json
          except Exception as e:
@@ -142,7 +150,7 @@ class TelebotClient(TelegramClient):
              dict: Response from the Telegram API.
          """
          try:
-            sent_message = await self.bot.send_document(chat_id, document_url, caption=caption)
+            sent_message = await asyncio.to_thread(self.bot.send_document, chat_id, document_url, caption=caption)
             logger.info(f"Document sent to chat {chat_id}: {document_url}")
             return sent_message.json
          except Exception as e:
@@ -160,7 +168,7 @@ class TelebotClient(TelegramClient):
             dict: Response from the Telegram API.
         """
         try:
-            sent_message = await self.bot.send_location(chat_id, latitude, longitude)
+            sent_message = await asyncio.to_thread(self.bot.send_location, chat_id, latitude, longitude)
             logger.info(f"Location sent to chat {chat_id}: lat={latitude}, lon={longitude}")
             return sent_message.json
         except Exception as e:
@@ -177,7 +185,7 @@ class TelebotClient(TelegramClient):
              dict: Response from the Telegram API.
         """
         try:
-            sent_message = await self.bot.send_sticker(chat_id, sticker_url)
+            sent_message = await asyncio.to_thread(self.bot.send_sticker, chat_id, sticker_url)
             logger.info(f"Sticker sent to chat {chat_id}: {sticker_url}")
             return sent_message.json
         except Exception as e:
@@ -196,7 +204,7 @@ class TelebotClient(TelegramClient):
             dict: Response from the Telegram API.
         """
         try:
-            sent_message = await self.bot.send_contact(chat_id, phone_number, first_name, last_name=last_name)
+            sent_message = await asyncio.to_thread(self.bot.send_contact, chat_id, phone_number, first_name, last_name=last_name)
             logger.info(f"Contact sent to chat {chat_id}: {phone_number}")
             return sent_message.json
         except Exception as e:
@@ -217,7 +225,7 @@ class TelebotClient(TelegramClient):
             dict: Response from the Telegram API.
         """
         try:
-            sent_message = await self.bot.send_venue(chat_id, latitude, longitude, title, address)
+            sent_message = await asyncio.to_thread(self.bot.send_venue, chat_id, latitude, longitude, title, address)
             logger.info(f"Venue sent to chat {chat_id}: {address}")
             return sent_message.json
         except Exception as e:
@@ -234,7 +242,7 @@ class TelebotClient(TelegramClient):
             dict: Response from the Telegram API.
         """
         try:
-            sent_message = await self.bot.send_game(chat_id, game_short_name)
+            sent_message = await asyncio.to_thread(self.bot.send_game, chat_id, game_short_name)
             logger.info(f"Game sent to chat {chat_id}: {game_short_name}")
             return sent_message.json
         except Exception as e:
@@ -252,14 +260,116 @@ class TelebotClient(TelegramClient):
             dict: Response from the Telegram API.
         """
         try:
-             sent_message = await self.bot.send_poll(chat_id, question, options, is_anonymous=False)
+             sent_message = await asyncio.to_thread(self.bot.send_poll, chat_id, question, options, is_anonymous=False)
              logger.info(f"Poll sent to chat {chat_id}: {question}")
              return sent_message.json
         except Exception as e:
              logger.error(f"Failed to send poll: {e}")
              raise TelegramAPIException(detail=f"Failed to send poll: {e}")
 
-    @abstractmethod
-    async def handle_message(self, message: dict) -> None:
-        """Abstract method for handling incoming messages"""
-        raise NotImplementedError
+    @handle_exceptions
+    async def set_webhook(self, url: str) -> bool:
+        """Sets a webhook for the bot."""
+        try:
+            await asyncio.to_thread(self.bot.set_webhook, url=url)
+            logger.info(f"Webhook was set successfully, url: {url}")
+            return True
+        except Exception as e:
+            logger.error(f"Webhook was not set, error: {e}")
+            return False
+    
+    @handle_exceptions
+    async def delete_webhook(self) -> bool:
+        """Deletes a webhook for the bot."""
+        try:
+             await asyncio.to_thread(self.bot.delete_webhook)
+             logger.info(f"Webhook was deleted successfully")
+             return True
+        except Exception as e:
+            logger.error(f"Webhook was not deleted, error: {e}")
+            return False
+    
+    @handle_exceptions
+    async def get_chat_members(self, chat_id: int) -> List[Dict[str, Any]]:
+         """
+         Get list of chat members.
+         Args:
+             chat_id (int): Chat ID to get chat members from.
+         Returns:
+             List[Dict[str,Any]]: List of chat members info
+         """
+         try:
+              chat_members = await asyncio.to_thread(self.bot.get_chat_members_count, chat_id)
+              logger.info(f"Chat members were retrieved successfully from chat_id {chat_id}")
+              return [{"members_count": chat_members}]
+         except Exception as e:
+            logger.error(f"Failed to get chat members: {e}")
+            raise TelegramAPIException(detail=f"Failed to get chat members: {e}")
+
+    @handle_exceptions
+    async def ban_chat_member(self, chat_id: int, user_id: int) -> None:
+        """Bans a user from a chat."""
+        try:
+            await asyncio.to_thread(self.bot.ban_chat_member, chat_id, user_id)
+            logger.info(f"User {user_id} banned from chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Failed to ban user {user_id} from chat {chat_id}: {e}")
+            raise TelegramAPIException(detail=f"Failed to ban user {user_id} from chat {chat_id}: {e}")
+
+    @handle_exceptions
+    async def unban_chat_member(self, chat_id: int, user_id: int) -> None:
+        """Unbans a user from a chat."""
+        try:
+            await asyncio.to_thread(self.bot.unban_chat_member, chat_id, user_id)
+            logger.info(f"User {user_id} unbanned from chat {chat_id}")
+        except Exception as e:
+             logger.error(f"Failed to unban user {user_id} from chat {chat_id}: {e}")
+             raise TelegramAPIException(detail=f"Failed to unban user {user_id} from chat {chat_id}: {e}")
+
+    @handle_exceptions
+    async def set_chat_title(self, chat_id: int, title: str) -> None:
+        """Sets a title for a chat."""
+        try:
+            await asyncio.to_thread(self.bot.set_chat_title, chat_id, title)
+            logger.info(f"Set title to chat {chat_id} : {title}")
+        except Exception as e:
+            logger.error(f"Failed to set chat title for chat {chat_id}: {e}")
+            raise TelegramAPIException(detail=f"Failed to set chat title for chat {chat_id}: {e}")
+
+    @handle_exceptions
+    async def set_chat_description(self, chat_id: int, description: str) -> None:
+        """Sets a description for a chat."""
+        try:
+            await asyncio.to_thread(self.bot.set_chat_description, chat_id, description)
+            logger.info(f"Set chat description for chat {chat_id} : {description}")
+        except Exception as e:
+             logger.error(f"Failed to set chat description for chat {chat_id}: {e}")
+             raise TelegramAPIException(detail=f"Failed to set chat description for chat {chat_id}: {e}")
+    
+    @handle_exceptions
+    async def pin_chat_message(self, chat_id: int, message_id: int) -> None:
+        """Pins a message in a chat."""
+        try:
+            await asyncio.to_thread(self.bot.pin_chat_message, chat_id, message_id)
+            logger.info(f"Message {message_id} pinned in chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Failed to pin message {message_id} in chat {chat_id}: {e}")
+            raise TelegramAPIException(detail=f"Failed to pin message {message_id} in chat {chat_id}: {e}")
+
+    @handle_exceptions
+    async def unpin_chat_message(self, chat_id: int, message_id: int) -> None:
+        """Unpins a message in a chat."""
+        try:
+            await asyncio.to_thread(self.bot.unpin_chat_message, chat_id, message_id)
+            logger.info(f"Message {message_id} unpinned in chat {chat_id}")
+        except Exception as e:
+             logger.error(f"Failed to unpin message {message_id} in chat {chat_id}: {e}")
+             raise TelegramAPIException(detail=f"Failed to unpin message {message_id} in chat {chat_id}: {e}")
+    
+    async def close(self) -> None:
+        """Closes the telebot bot"""
+        if self.bot:
+            session = await asyncio.to_thread(self.bot.get_session)
+            if session:
+              session.close()
+            logger.info("Telebot client closed")

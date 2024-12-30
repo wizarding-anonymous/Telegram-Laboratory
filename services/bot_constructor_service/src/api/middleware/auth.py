@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from src.integrations.auth_service import AuthService, get_current_user
+from src.integrations import AuthService, get_current_user
 from src.config import settings
 from src.integrations.logging_client import LoggingClient
 
@@ -56,18 +56,26 @@ class AuthMiddleware:
         return response
 
 
-def admin_required():
+def admin_required(required_roles: Optional[List[str]] = None):
     """
-    Dependency to ensure the user has the "admin" role.
+    Dependency to ensure the user has the specified roles.
+    If no roles are specified, any authenticated user can access the endpoint.
     """
-    logging_client.info("Checking if user has admin rights")
+    logging_client.info(f"Checking if user has required roles: {required_roles}")
 
-    async def check_admin(user: dict = Depends(get_current_user)):
-        if "admin" not in user.get("roles", []):
+    async def check_roles(user: dict = Depends(get_current_user)):
+        if required_roles is None:
+            logging_client.debug(f"Any user has permission")
+            return True
+        
+        user_roles = user.get("roles", [])
+        if not any(role in user_roles for role in required_roles):
             logging_client.warning(
-                f"User with id: {user.get('id')} has not admin rights"
+                f"User with id: {user.get('id')} does not have required roles: {required_roles}"
             )
-            raise HTTPException(status_code=403, detail="Admin role required")
-        logging_client.info(f"User with id: {user.get('id')} has admin rights")
+            raise HTTPException(status_code=403, detail=f"Required roles: {required_roles}")
+
+        logging_client.info(f"User with id: {user.get('id')} has required roles: {required_roles}")
         return True
-    return check_admin
+    
+    return check_roles

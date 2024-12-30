@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.models import MediaGroup, Connection
@@ -57,13 +57,13 @@ class MediaGroupRepository:
         return media_group
 
     @handle_exceptions
-    async def update(self, block_id: int, items: List[Dict[str, Any]]) -> Optional[MediaGroup]:
+    async def update(self, block_id: int, content: Dict[str, Any]) -> Optional[MediaGroup]:
         """
         Updates an existing media group block.
 
         Args:
             block_id (int): The ID of the media group block to update.
-            items (List[Dict[str, Any]]): The list of media items to store.
+            content (Dict[str, Any]): The media items to store.
 
         Returns:
             Optional[MediaGroup]: The updated media group block object, or None if not found.
@@ -74,7 +74,7 @@ class MediaGroupRepository:
             logging_client.warning(f"Media group block with id: {block_id} was not found")
             return None
 
-        media_group.content = {"items": items}
+        media_group.content = content
         await self.session.commit()
         await self.session.refresh(media_group)
         logging_client.info(f"Media group block with id: {block_id} was updated successfully")
@@ -117,3 +117,20 @@ class MediaGroupRepository:
         else:
             logging_client.info(f"Next blocks were not found for media group block with id: {block_id}")
             return []
+    
+    @handle_exceptions
+    async def get_by_bot_id_and_type(self, bot_id: int, type: str) -> List[MediaGroup]:
+        """
+        Retrieves all media group blocks of specific bot by its bot_id and type.
+
+        Args:
+            bot_id (int): ID of the bot
+            type (str): type of the block
+        Returns:
+            List[MediaGroup]: The list of media group block objects
+        """
+        logging_client.info(f"Getting all media group blocks for bot with id: {bot_id}")
+        query = select(MediaGroup).where(MediaGroup.bot_id == bot_id, MediaGroup.type == type)
+        result = await self.session.execute(query)
+        blocks = result.scalars().all()
+        return blocks

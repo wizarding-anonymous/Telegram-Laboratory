@@ -1,12 +1,14 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from fastapi import HTTPException
 from loguru import logger
 
 from src.core.utils import handle_exceptions
 from src.db.repositories import BlockRepository
 from src.integrations.logging_client import LoggingClient
+from src.config import settings
 
-logging_client = LoggingClient(service_name="bot_constructor")
+
+logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
 
 class FlowChartManager:
@@ -16,7 +18,7 @@ class FlowChartManager:
 
     def __init__(
         self,
-        block_repository: BlockRepository,
+         block_repository: BlockRepository
     ):
         self.block_repository = block_repository
 
@@ -24,6 +26,11 @@ class FlowChartManager:
     async def get_flow_chart(self, bot_id: int) -> Dict[str, Any]:
         """Retrieves a flow chart representation of a bot's logic."""
         logging_client.info(f"Getting flow chart for bot_id: {bot_id}")
+        
+        bot = await self.block_repository.get_bot_by_id(bot_id)
+        if not bot:
+            logging_client.warning(f"Bot with id {bot_id} not found")
+            return {}
         
         blocks = await self.block_repository.list_by_bot_id(bot_id)
         if not blocks:
@@ -50,8 +57,8 @@ class FlowChartManager:
             }
 
             if hasattr(block, "connections") and block.connections:
-                 for target_id in block.connections:
-                     edges.append({"source": block_id, "target": target_id})
+                 for connection in block.connections:
+                     edges.append({"source": block_id, "target": connection.target_block_id})
         
         logging_client.info(f"Flow chart built. Nodes: {len(nodes)}, Edges: {len(edges)}")
         return {"nodes": list(nodes.values()), "edges": edges}
@@ -61,7 +68,11 @@ class FlowChartManager:
     async def update_flow_chart(self, bot_id: int) -> Dict[str, Any]:
         """Updates the flow chart representation for a bot."""
         logging_client.info(f"Updating flow chart for bot_id: {bot_id}")
-
+        bot = await self.block_repository.get_bot_by_id(bot_id)
+        if not bot:
+            logging_client.warning(f"Bot with id {bot_id} not found")
+            return {}
+        
         blocks = await self.block_repository.list_by_bot_id(bot_id)
         if not blocks:
              logging_client.warning(f"No blocks found for bot_id: {bot_id}")

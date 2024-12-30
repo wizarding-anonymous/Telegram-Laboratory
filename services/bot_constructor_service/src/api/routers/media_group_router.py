@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, status
 
-from src.api.controllers.media_group_controller import MediaGroupController
+from src.api.controllers import MediaGroupController
 from src.api.schemas import (
     MediaGroupCreate,
     MediaGroupUpdate,
     MediaGroupResponse,
     MediaGroupListResponse,
     SuccessResponse,
+    ErrorResponse,
 )
 from src.api.middleware.auth import AuthMiddleware
 
@@ -14,6 +15,12 @@ router = APIRouter(
     prefix="/bots/{bot_id}/media_groups",
     tags=["Media Groups"],
     dependencies=[Depends(AuthMiddleware())],
+     responses={
+        400: {"model": ErrorResponse, "description": "Bad Request"},
+        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        403: {"model": ErrorResponse, "description": "Forbidden"},
+        404: {"model": ErrorResponse, "description": "Media Group block not found"},
+    },
 )
 
 
@@ -91,5 +98,4 @@ async def delete_media_group(
     """
     Delete a media group block by its ID.
     """
-    await media_group_controller.delete_media_group(block_id)
-    return SuccessResponse(message="Media group block deleted successfully")
+    return await media_group_controller.delete_media_group(block_id)

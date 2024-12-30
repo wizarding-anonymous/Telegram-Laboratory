@@ -31,5 +31,5 @@ __all__ = [
     "ApiRequestController",
     "BotSettingsController",
     "ConnectionController",
-     "MediaGroupController",
+    "MediaGroupController",
 ]

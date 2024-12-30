@@ -1,10 +1,11 @@
 from typing import Any, Dict, List, Optional
-
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from loguru import logger
+
 from src.integrations.telegram.client import TelegramClient
 from src.core.utils.exceptions import TelegramAPIException
+from src.core.utils import handle_exceptions
 
 
 class AiogramClient(TelegramClient):
@@ -18,12 +19,16 @@ class AiogramClient(TelegramClient):
         self.dispatcher = Dispatcher(self.bot)
         logger.info("AiogramClient initialized")
     
-    async def validate_token(self, token: str) -> bool:
+    @handle_exceptions
+    async def check_connection(self, bot_token: str = None) -> bool:
         """
         Validate telegram token using aiogram.
         Args:
-           token(str): Token for telegram bot.
+           bot_token(str): Token for telegram bot.
+         Returns:
+            bool: true if connection successful, otherwise false
         """
+        token = bot_token or self.bot_token
         try:
             bot = Bot(token=token)
             bot_info = await bot.get_me()
@@ -35,8 +40,9 @@ class AiogramClient(TelegramClient):
                 return False
         except Exception as e:
              logger.error(f"Aiogram token is invalid, exception: {e}")
-             raise TelegramAPIException(detail=f"Aiogram token is invalid: {e}")
+             return False
 
+    @handle_exceptions
     async def send_message(self, chat_id: int, text: str, parse_mode: str = "HTML", reply_markup: Optional[Any] = None, inline_keyboard: Optional[Any] = None) -> dict:
         """
         Send a message to a Telegram chat using aiogram.
@@ -66,6 +72,7 @@ class AiogramClient(TelegramClient):
             logger.error(f"Failed to send message: {e}")
             raise TelegramAPIException(detail=f"Failed to send message: {e}")
     
+    @handle_exceptions
     async def send_photo(self, chat_id: int, photo_url: str, caption: Optional[str] = None) -> dict:
          """
          Sends a photo to a Telegram chat using aiogram.
@@ -86,6 +93,7 @@ class AiogramClient(TelegramClient):
             logger.error(f"Failed to send photo: {e}")
             raise TelegramAPIException(detail=f"Failed to send photo: {e}")
 
+    @handle_exceptions
     async def send_video(self, chat_id: int, video_url: str, caption: Optional[str] = None) -> dict:
          """
          Sends a video to a Telegram chat using aiogram.
@@ -107,6 +115,7 @@ class AiogramClient(TelegramClient):
              raise TelegramAPIException(detail=f"Failed to send video: {e}")
 
 
+    @handle_exceptions
     async def send_audio(self, chat_id: int, audio_url: str, caption: Optional[str] = None) -> dict:
          """
          Sends an audio to a Telegram chat using aiogram.
@@ -127,6 +136,7 @@ class AiogramClient(TelegramClient):
               logger.error(f"Failed to send audio: {e}")
               raise TelegramAPIException(detail=f"Failed to send audio: {e}")
 
+    @handle_exceptions
     async def send_document(self, chat_id: int, document_url: str, caption: Optional[str] = None) -> dict:
          """
          Sends a document to a Telegram chat using aiogram.
@@ -147,6 +157,7 @@ class AiogramClient(TelegramClient):
              logger.error(f"Failed to send document: {e}")
              raise TelegramAPIException(detail=f"Failed to send document: {e}")
 
+    @handle_exceptions
     async def send_location(self, chat_id: int, latitude: float, longitude: float) -> dict:
         """
         Sends a location to a Telegram chat using aiogram.
@@ -165,6 +176,7 @@ class AiogramClient(TelegramClient):
             logger.error(f"Failed to send location: {e}")
             raise TelegramAPIException(detail=f"Failed to send location: {e}")
     
+    @handle_exceptions
     async def send_sticker(self, chat_id: int, sticker_url: str) -> dict:
         """
         Sends a sticker to a Telegram chat using aiogram.
@@ -182,6 +194,7 @@ class AiogramClient(TelegramClient):
             logger.error(f"Failed to send sticker: {e}")
             raise TelegramAPIException(detail=f"Failed to send sticker: {e}")
 
+    @handle_exceptions
     async def send_contact(self, chat_id: int, phone_number: str, first_name: str, last_name: str = "") -> dict:
         """
         Sends a contact to a Telegram chat using aiogram.
@@ -256,9 +269,112 @@ class AiogramClient(TelegramClient):
         except Exception as e:
              logger.error(f"Failed to send poll: {e}")
              raise TelegramAPIException(detail=f"Failed to send poll: {e}")
+    
 
+    @handle_exceptions
+    async def set_webhook(self, url: str) -> bool:
+        """Sets a webhook for the bot."""
+        logger.info(f"Setting webhook to url: {url}")
+        try:
+            await self.bot.set_webhook(url=url)
+            logger.info(f"Webhook was set successfully, url: {url}")
+            return True
+        except Exception as e:
+            logger.error(f"Webhook was not set, error: {e}")
+            return False
+    
+    @handle_exceptions
+    async def delete_webhook(self) -> bool:
+        """Deletes a webhook for the bot."""
+        logger.info("Deleting webhook")
+        try:
+            await self.bot.delete_webhook()
+            logger.info(f"Webhook was deleted successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Webhook was not deleted, error: {e}")
+            return False
 
-    @abstractmethod
-    async def handle_message(self, message: dict) -> None:
-        """Abstract method for handling incoming messages"""
-        raise NotImplementedError
+    @handle_exceptions
+    async def get_chat_members(self, chat_id: int) -> List[Dict[str, Any]]:
+         """
+         Get list of chat members.
+         Args:
+             chat_id (int): Chat ID to get chat members from.
+         Returns:
+             List[Dict[str,Any]]: List of chat members info
+         """
+         try:
+              chat_members = await self.bot.get_chat_members_count(chat_id)
+              logger.info(f"Chat members were retrieved successfully from chat_id {chat_id}")
+              return [{"members_count": chat_members}]
+         except Exception as e:
+            logger.error(f"Failed to get chat members: {e}")
+            raise TelegramAPIException(detail=f"Failed to get chat members: {e}")
+
+    @handle_exceptions
+    async def ban_chat_member(self, chat_id: int, user_id: int) -> None:
+        """Bans a user from a chat."""
+        try:
+            await self.bot.ban_chat_member(chat_id, user_id)
+            logger.info(f"User {user_id} banned from chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Failed to ban user {user_id} from chat {chat_id}: {e}")
+            raise TelegramAPIException(detail=f"Failed to ban user {user_id} from chat {chat_id}: {e}")
+
+    @handle_exceptions
+    async def unban_chat_member(self, chat_id: int, user_id: int) -> None:
+        """Unbans a user from a chat."""
+        try:
+            await self.bot.unban_chat_member(chat_id, user_id)
+            logger.info(f"User {user_id} unbanned from chat {chat_id}")
+        except Exception as e:
+             logger.error(f"Failed to unban user {user_id} from chat {chat_id}: {e}")
+             raise TelegramAPIException(detail=f"Failed to unban user {user_id} from chat {chat_id}: {e}")
+
+    @handle_exceptions
+    async def set_chat_title(self, chat_id: int, title: str) -> None:
+        """Sets a title for a chat."""
+        try:
+            await self.bot.set_chat_title(chat_id, title)
+            logger.info(f"Set title to chat {chat_id} : {title}")
+        except Exception as e:
+            logger.error(f"Failed to set chat title for chat {chat_id}: {e}")
+            raise TelegramAPIException(detail=f"Failed to set chat title for chat {chat_id}: {e}")
+
+    @handle_exceptions
+    async def set_chat_description(self, chat_id: int, description: str) -> None:
+        """Sets a description for a chat."""
+        try:
+            await self.bot.set_chat_description(chat_id, description)
+            logger.info(f"Set chat description for chat {chat_id} : {description}")
+        except Exception as e:
+             logger.error(f"Failed to set chat description for chat {chat_id}: {e}")
+             raise TelegramAPIException(detail=f"Failed to set chat description for chat {chat_id}: {e}")
+    
+    @handle_exceptions
+    async def pin_chat_message(self, chat_id: int, message_id: int) -> None:
+        """Pins a message in a chat."""
+        try:
+            await self.bot.pin_chat_message(chat_id, message_id)
+            logger.info(f"Message {message_id} pinned in chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Failed to pin message {message_id} in chat {chat_id}: {e}")
+            raise TelegramAPIException(detail=f"Failed to pin message {message_id} in chat {chat_id}: {e}")
+
+    @handle_exceptions
+    async def unpin_chat_message(self, chat_id: int, message_id: int) -> None:
+        """Unpins a message in a chat."""
+        try:
+            await self.bot.unpin_chat_message(chat_id, message_id)
+            logger.info(f"Message {message_id} unpinned in chat {chat_id}")
+        except Exception as e:
+             logger.error(f"Failed to unpin message {message_id} in chat {chat_id}: {e}")
+             raise TelegramAPIException(detail=f"Failed to unpin message {message_id} in chat {chat_id}: {e}")
+    
+    async def close(self) -> None:
+        """Closes the aiogram bot"""
+        if self.bot:
+            session = await self.bot.get_session()
+            await session.close()
+            logger.info("Aiogram client closed")

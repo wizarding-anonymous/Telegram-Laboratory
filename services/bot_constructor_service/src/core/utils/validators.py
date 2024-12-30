@@ -41,7 +41,7 @@ def validate_block_type(block_type: str) -> None:
         "database_connect",
         "database_query",
         "set_webhook",
-         "delete_webhook",
+        "delete_webhook",
         "handle_callback_query",
         "send_callback_response",
         "variable",
@@ -87,7 +87,7 @@ def validate_block_type(block_type: str) -> None:
         "clear_user_data",
         "manage_session",
         "media_group",
-         "flow_chart"
+        "flow_chart"
     ]
     if not isinstance(block_type, str) or block_type not in allowed_types:
         logger.error(f"Invalid block type: {block_type}")

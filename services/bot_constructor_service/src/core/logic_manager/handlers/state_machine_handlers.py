@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.database import get_session
 from src.config import settings
 from src.integrations.logging_client import LoggingClient
-from src.core.logic_manager.base import Block
 
 
 logging_client = LoggingClient(service_name=settings.SERVICE_NAME)

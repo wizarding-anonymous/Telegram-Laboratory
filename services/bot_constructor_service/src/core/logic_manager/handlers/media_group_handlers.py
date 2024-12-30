@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from src.core.logic_manager.handlers.utils import get_template
 from src.core.utils import handle_exceptions
 from src.integrations.telegram.client import TelegramClient
@@ -17,7 +17,7 @@ class MediaGroupHandler:
         self.telegram_client = telegram_client
         
     @handle_exceptions
-    async def handle_media_group(self, block: Dict[str, Any], chat_id: int, variables: Dict[str,Any], bot_logic: Dict[str, Any]) -> Optional[int]:
+    async def handle_media_group(self, block: Dict[str, Any], chat_id: int, variables: Dict[str,Any], bot_logic: Dict[str, Any], user_message: str) -> Optional[int]:
         """
         Handles sending a media group to a telegram chat.
 
@@ -25,7 +25,7 @@ class MediaGroupHandler:
             block (dict): The media group block details from database.
             chat_id (int): Telegram chat ID where to send the media group.
             variables (dict): Dictionary of variables
-        
+            bot_logic (dict) : bot logic
         Returns:
              Optional[int]: next_block_id if it exists, otherwise None
         """

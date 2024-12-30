@@ -9,7 +9,7 @@ from src.core.utils.helpers import handle_exceptions
 from src.integrations.logging_client import LoggingClient
 from src.core.utils.exceptions import TelegramAPIException
 
-logging_client = LoggingClient(service_name="bot_constructor")
+logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
 
 
 class TelegramAPI:
@@ -17,8 +17,9 @@ class TelegramAPI:
     A client for interacting with the Telegram Bot API.
     """
 
-    def __init__(self, client: httpx.AsyncClient = None):
-        self.base_url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}"
+    def __init__(self, bot_token: str = None, client: httpx.AsyncClient = None):
+        self.bot_token = bot_token or settings.TELEGRAM_BOT_TOKEN
+        self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
         self.client = client or httpx.AsyncClient()
         logger.info("TelegramAPI initialized")
 
@@ -178,6 +179,26 @@ class TelegramAPI:
         if timeout:
             params["timeout"] = timeout
         return await self._make_request("GET", "getUpdates", params=params)
+    
+    @handle_exceptions
+    async def check_connection(self, bot_token: str = None) -> bool:
+         """
+         Checks connection to Telegram API using method getMe
+        
+         Returns:
+            bool: true if connection successful, otherwise false
+         """
+         logger.info("Checking Telegram API connection")
+         token = bot_token or self.bot_token
+         url = f"https://api.telegram.org/bot{token}/getMe"
+         try:
+            response = await self.client.get(url)
+            response.raise_for_status()
+            logger.info("Telegram API connection is healthy")
+            return True
+         except httpx.HTTPError as exc:
+            logger.error(f"Telegram API connection check failed: {exc}")
+            return False
 
     async def close(self) -> None:
         """Closes the httpx client"""
