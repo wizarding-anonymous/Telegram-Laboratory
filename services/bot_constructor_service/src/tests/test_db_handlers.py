@@ -1,142 +1,238 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from typing import Dict, Any, List, Optional
-from fastapi import HTTPException
-
-from src.core.logic_manager.handlers.db_handlers import DatabaseHandler
-from src.db.database import get_session
-from src.db.repositories import DatabaseRepository
-from src.core.utils.exceptions import TelegramAPIException
-from src.core.logic_manager.base import Block
-from sqlalchemy.ext.asyncio import AsyncSession
+from unittest.mock import AsyncMock
+from src.core.logic_manager.handlers import db_handlers
+from src.integrations.telegram import TelegramAPI
+from src.core.utils.exceptions import ObjectNotFoundException
+from typing import Dict, Any
+from src.db import get_session
+from sqlalchemy import text
 
 
-@pytest.mark.asyncio
-async def test_handle_database_connect_success():
-    """Test database connect block success."""
-    mock_session = AsyncMock(spec=AsyncSession)
-    mock_repo = AsyncMock(spec=DatabaseRepository)
-    mock_repo.create.return_value = None
+@pytest.fixture
+def mock_telegram_api() -> AsyncMock:
+    """
+    Fixture to create a mock TelegramAPI client.
+    """
+    mock = AsyncMock(spec=TelegramAPI)
+    mock.send_message.return_value = {"ok": True}
+    return mock
 
-    handler = DatabaseHandler(session=mock_session)
-    handler.database_repository = mock_repo
-    test_block = {
-         "id": 1,
-        "type": "database_connect",
-        "content": {"db_uri": "postgresql://test_user:test_password@localhost:5432/test_db"},
-    }
-    await handler.handle_database_connect(
-      block=test_block, chat_id=123, variables={}
-    )
-    mock_repo.create.assert_called_once()
-
-@pytest.mark.asyncio
-async def test_handle_database_connect_with_params():
-     """Test database connect with connection params"""
-     mock_session = AsyncMock(spec=AsyncSession)
-     mock_repo = AsyncMock(spec=DatabaseRepository)
-     mock_repo.create.return_value = None
-
-     handler = DatabaseHandler(session=mock_session)
-     handler.database_repository = mock_repo
-     test_block = {
-          "id": 1,
-        "type": "database_connect",
-        "content": {"connection_params": {"host": "test_host", "port": 5432}},
-    }
-     await handler.handle_database_connect(
-        block=test_block, chat_id=123, variables={"test_var": "test_value"}
-    )
-     mock_repo.create.assert_called_once()
-
-@pytest.mark.asyncio
-async def test_handle_database_connect_no_params():
-    """Test database connect without params"""
-    mock_session = AsyncMock(spec=AsyncSession)
-    mock_repo = AsyncMock(spec=DatabaseRepository)
-    mock_repo.create.return_value = None
-
-    handler = DatabaseHandler(session=mock_session)
-    handler.database_repository = mock_repo
-    test_block = {
-        "id": 1,
-        "type": "database_connect",
-        "content": {},
-    }
-    await handler.handle_database_connect(
-        block=test_block, chat_id=123, variables={}
-    )
-    mock_repo.create.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_handle_database_query_success():
-    """Test database query successfuly."""
-    mock_session = AsyncMock(spec=AsyncSession)
-    mock_repo = AsyncMock(spec=DatabaseRepository)
-    mock_repo.execute_query.return_value = [{"test": "test"}]
-    mock_repo.get_by_id.return_value = {"id": 1, "db_uri": "test_db_uri", "type": "database_connect"}
-    
-    handler = DatabaseHandler(session=mock_session)
-    handler.database_repository = mock_repo
-    test_block = {
-       "id": 1,
-        "type": "database_query",
-        "content": {"query": "SELECT * FROM test_table;", "db_block_id": 1},
-    }
-    
-    from src.core.logic_manager import LogicManager
-    class MockLogicManager(LogicManager):
-            async def _get_next_blocks(self, block_id: int, bot_logic: Dict[str, Any]) -> List[Block]:
-                 return [Block(id=2, type="send_text", content={"content": "test"})]
-
-            async def _process_block(self, block: Block, chat_id: int, user_message: str, bot_logic: Dict[str, Any], variables: Optional[Dict[str, Any]] = None) -> Optional[int]:
-                return None
-    mock_logic_manager = MockLogicManager()
-    handler.logic_manager = mock_logic_manager
-    
-    next_block_id = await handler.handle_database_query(
-        block=test_block, chat_id=123, variables={}, user_message="test_message", bot_logic={}
-    )
-    assert next_block_id is None
-    mock_repo.execute_query.assert_called_once()
-
-@pytest.mark.asyncio
-async def test_handle_database_query_no_db_block():
-    """Test database query with no database block id."""
-    mock_session = AsyncMock(spec=AsyncSession)
-    mock_repo = AsyncMock(spec=DatabaseRepository)
-    handler = DatabaseHandler(session=mock_session)
-    handler.database_repository = mock_repo
-    test_block = {
-         "id": 1,
-        "type": "database_query",
-        "content": {"query": "SELECT * FROM test_table;"}
-    }
-    next_block_id = await handler.handle_database_query(
-        block=test_block, chat_id=123, variables={}, user_message="test_message", bot_logic={}
-    )
-    assert next_block_id is None
-    mock_repo.execute_query.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_handle_database_query_api_error():
-    """Test database query with api error."""
-    mock_session = AsyncMock(spec=AsyncSession)
-    mock_repo = AsyncMock(spec=DatabaseRepository)
-    mock_repo.execute_query.side_effect = Exception("Database error")
-    mock_repo.get_by_id.return_value = {"id": 1, "db_uri": "test_db_uri", "type": "database_connect"}
-    handler = DatabaseHandler(session=mock_session)
-    handler.database_repository = mock_repo
-    test_block = {
-        "id": 1,
-        "type": "database_query",
-        "content": {"query": "SELECT * FROM test_table;", "db_block_id": 1},
-    }
-    with pytest.raises(Exception) as exc_info:
-       await handler.handle_database_query(
-            block=test_block, chat_id=123, variables={}, user_message="test_message", bot_logic={}
+@pytest.fixture
+async def create_test_bot() -> Dict[str, Any]:
+    """
+    Fixture to create a test bot in the database.
+    """
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO bots (user_id, name)
+            VALUES (:user_id, :name)
+            RETURNING id, user_id, name, created_at;
+        """
         )
-    assert "Database query failed" in str(exc_info.value)
-    mock_repo.execute_query.assert_called_once()
+        params = {"user_id": 1, "name": "Test Bot"}
+        result = await session.execute(query, params)
+        await session.commit()
+        bot = result.fetchone()
+        return dict(bot._mapping)
+
+@pytest.fixture
+async def create_test_block(create_test_bot) -> Dict[str, Any]:
+    """
+    Fixture to create a test block in the database.
+    """
+    bot_id = create_test_bot["id"]
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO blocks (bot_id, type, content)
+            VALUES (:bot_id, :type, :content)
+            RETURNING id, bot_id, type, content, created_at;
+        """
+        )
+        params = {"bot_id": bot_id, "type": "message", "content": {"text": "Test message"}}
+        result = await session.execute(query, params)
+        await session.commit()
+        block = result.fetchone()
+        return dict(block._mapping)
+    
+@pytest.fixture
+async def create_test_db_block(create_test_block) -> Dict[str, Any]:
+    """
+    Fixture to create a test db block in the database.
+    """
+    block_id = create_test_block["id"]
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO databases (block_id, connection_params, query)
+            VALUES (:block_id, :connection_params, :query)
+            RETURNING id, block_id, connection_params, query, created_at;
+            """
+        )
+        params = {
+            "block_id": block_id,
+            "connection_params": {"db_uri": "test_uri"},
+            "query": "test_query",
+        }
+        result = await session.execute(query, params)
+        await session.commit()
+        db_block = result.fetchone()
+        return dict(db_block._mapping)
+
+
+@pytest.mark.asyncio
+async def test_db_connect_success(
+    mock_telegram_api: AsyncMock, create_test_db_block: Dict[str, Any]
+):
+    """
+    Test successful connection to db.
+    """
+    block_id = create_test_db_block["id"]
+    test_data = {"block_id": block_id}
+    result = await db_handlers.db_connect(mock_telegram_api, test_data)
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_db_connect_not_found_block(
+    mock_telegram_api: AsyncMock,
+):
+    """
+    Test db connect with not found block.
+    """
+    block_id = 999
+    test_data = {"block_id": block_id}
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+       await db_handlers.db_connect(mock_telegram_api, test_data)
+    assert str(exc_info.value) == "Database block not found"
+
+
+@pytest.mark.asyncio
+async def test_db_query_success(
+    mock_telegram_api: AsyncMock, create_test_db_block: Dict[str, Any]
+):
+    """
+    Test successful db query execution.
+    """
+    block_id = create_test_db_block["id"]
+    test_data = {"block_id": block_id}
+    result = await db_handlers.db_query(mock_telegram_api, test_data)
+    assert result is not None
+
+@pytest.mark.asyncio
+async def test_db_query_not_found_block(
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test db query with not found block.
+    """
+    block_id = 999
+    test_data = {"block_id": block_id}
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+       await db_handlers.db_query(mock_telegram_api, test_data)
+    assert str(exc_info.value) == "Database block not found"
+
+
+@pytest.mark.asyncio
+async def test_db_fetch_data_success(
+    mock_telegram_api: AsyncMock, create_test_db_block: Dict[str, Any]
+):
+    """
+    Test successful db fetch data.
+    """
+    block_id = create_test_db_block["id"]
+    test_data = {"block_id": block_id}
+    result = await db_handlers.db_fetch_data(mock_telegram_api, test_data)
+    assert result is not None
+
+@pytest.mark.asyncio
+async def test_db_fetch_data_not_found_block(
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test db fetch data with not found block.
+    """
+    block_id = 999
+    test_data = {"block_id": block_id}
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+        await db_handlers.db_fetch_data(mock_telegram_api, test_data)
+    assert str(exc_info.value) == "Database block not found"
+
+
+@pytest.mark.asyncio
+async def test_db_insert_data_success(
+    mock_telegram_api: AsyncMock, create_test_db_block: Dict[str, Any]
+):
+    """
+    Test successful db insert data.
+    """
+    block_id = create_test_db_block["id"]
+    test_data = {"block_id": block_id}
+    result = await db_handlers.db_insert_data(mock_telegram_api, test_data)
+    assert result is not None
+
+@pytest.mark.asyncio
+async def test_db_insert_data_not_found_block(
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test db insert data with not found block.
+    """
+    block_id = 999
+    test_data = {"block_id": block_id}
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+       await db_handlers.db_insert_data(mock_telegram_api, test_data)
+    assert str(exc_info.value) == "Database block not found"
+
+
+@pytest.mark.asyncio
+async def test_db_update_data_success(
+    mock_telegram_api: AsyncMock, create_test_db_block: Dict[str, Any]
+):
+    """
+    Test successful db update data.
+    """
+    block_id = create_test_db_block["id"]
+    test_data = {"block_id": block_id}
+    result = await db_handlers.db_update_data(mock_telegram_api, test_data)
+    assert result is not None
+
+@pytest.mark.asyncio
+async def test_db_update_data_not_found_block(
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test db update data with not found block.
+    """
+    block_id = 999
+    test_data = {"block_id": block_id}
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+       await db_handlers.db_update_data(mock_telegram_api, test_data)
+    assert str(exc_info.value) == "Database block not found"
+
+
+@pytest.mark.asyncio
+async def test_db_delete_data_success(
+    mock_telegram_api: AsyncMock, create_test_db_block: Dict[str, Any]
+):
+    """
+    Test successful db delete data.
+    """
+    block_id = create_test_db_block["id"]
+    test_data = {"block_id": block_id}
+    result = await db_handlers.db_delete_data(mock_telegram_api, test_data)
+    assert result is not None
+
+@pytest.mark.asyncio
+async def test_db_delete_data_not_found_block(
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test db delete data with not found block.
+    """
+    block_id = 999
+    test_data = {"block_id": block_id}
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+       await db_handlers.db_delete_data(mock_telegram_api, test_data)
+    assert str(exc_info.value) == "Database block not found"

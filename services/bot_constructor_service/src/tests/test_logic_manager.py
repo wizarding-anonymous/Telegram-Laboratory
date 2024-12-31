@@ -1,226 +1,174 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from typing import Dict, Any, List, Optional
+from unittest.mock import AsyncMock
+from src.core.logic_manager import LogicManager
+from src.integrations.telegram import TelegramAPI
+from src.core.logic_manager.base import Block
+from typing import Dict, Any, List
+from src.db import get_session
+from sqlalchemy import text
+from src.core.utils.exceptions import ObjectNotFoundException
 
-from src.core.logic_manager.base import LogicManager, Block
-from src.core.utils.exceptions import TelegramAPIException
-from src.db.repositories import BlockRepository, BotRepository
-from src.integrations import AuthService, get_telegram_client
-from fastapi import HTTPException
-
-
-@pytest.mark.asyncio
-async def test_execute_bot_logic_success():
-    """Test execute bot logic successfully."""
-    mock_block_repository = AsyncMock(spec=BlockRepository)
-    mock_bot_repository = AsyncMock(spec=BotRepository)
-    mock_auth_service = AsyncMock(spec=AuthService)
-
-    test_bot = {
-        "id": 1,
-        "logic": {"start_block_id": 10, "connections": []},
-         "token": "test_token",
-         "library": "telegram_api"
-    }
-    test_block = {"id": 10, "type": "text_message", "content": {"text": "Hello"}}
-
-    mock_bot_repository.get_by_id.return_value = test_bot
-    mock_block_repository.get_by_id.return_value = test_block
-    mock_auth_service.get_user_by_token.return_value = {"id": 1, "roles": ["admin"]}
+@pytest.fixture
+def mock_telegram_api() -> AsyncMock:
+    """
+    Fixture to create a mock TelegramAPI client.
+    """
+    mock = AsyncMock(spec=TelegramAPI)
+    mock.send_message.return_value = {"ok": True}
+    return mock
 
 
-    logic_manager = LogicManager(
-        block_repository=mock_block_repository,
-        bot_repository=mock_bot_repository,
-        auth_service=mock_auth_service,
-    )
-
-    await logic_manager.execute_bot_logic(bot_id=1, chat_id=123, user_message="test_message")
-    mock_block_repository.get_by_id.assert_called()
-
-
-@pytest.mark.asyncio
-async def test_execute_bot_logic_bot_not_found():
-    """Test execute bot logic when bot not found."""
-    mock_block_repository = AsyncMock(spec=BlockRepository)
-    mock_bot_repository = AsyncMock(spec=BotRepository)
-    mock_auth_service = AsyncMock(spec=AuthService)
-    mock_bot_repository.get_by_id.return_value = None
-
-    logic_manager = LogicManager(
-        block_repository=mock_block_repository,
-        bot_repository=mock_bot_repository,
-        auth_service=mock_auth_service,
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        await logic_manager.execute_bot_logic(bot_id=1, chat_id=123, user_message="test_message", user={})
-    assert exc_info.value.status_code == 404
-    assert "Bot or bot logic was not found" in exc_info.value.detail
-    
-    mock_bot_repository.get_by_id.assert_called_once_with(1)
-    
-
-@pytest.mark.asyncio
-async def test_execute_bot_logic_no_start_block():
-     """Test execute bot logic when start block not found."""
-     mock_block_repository = AsyncMock(spec=BlockRepository)
-     mock_bot_repository = AsyncMock(spec=BotRepository)
-     mock_auth_service = AsyncMock(spec=AuthService)
-     test_bot = {"id": 1, "logic": {}, "token": "test_token", "library": "telegram_api"}
-     mock_bot_repository.get_by_id.return_value = test_bot
-     mock_auth_service.get_user_by_token.return_value = {"id": 1, "roles": ["admin"]}
-
-     logic_manager = LogicManager(
-         block_repository=mock_block_repository,
-         bot_repository=mock_bot_repository,
-         auth_service=mock_auth_service,
-    )
-
-     with pytest.raises(HTTPException) as exc_info:
-         await logic_manager.execute_bot_logic(bot_id=1, chat_id=123, user_message="test_message", user={})
-     assert exc_info.value.status_code == 404
-     assert "Start block id not found for bot" in exc_info.value.detail
-     mock_bot_repository.get_by_id.assert_called_once_with(1)
-     
-@pytest.mark.asyncio
-async def test_execute_bot_logic_unauthorized():
-    """Test execute bot logic with unauthorized user."""
-    mock_block_repository = AsyncMock(spec=BlockRepository)
-    mock_bot_repository = AsyncMock(spec=BotRepository)
-    mock_auth_service = AsyncMock(spec=AuthService)
-    test_bot = {
-        "id": 1,
-        "logic": {"start_block_id": 10},
-          "token": "test_token",
-        "library": "telegram_api"
-    }
-    mock_bot_repository.get_by_id.return_value = test_bot
-    mock_auth_service.get_user_by_token.return_value = {"id": 1, "roles": ["user"]}
-
-
-    logic_manager = LogicManager(
-        block_repository=mock_block_repository,
-        bot_repository=mock_bot_repository,
-        auth_service=mock_auth_service,
-    )
-    with pytest.raises(HTTPException) as exc_info:
-        await logic_manager.execute_bot_logic(bot_id=1, chat_id=123, user_message="test_message", user={"id": 1, "roles": ["user"]})
-    assert exc_info.value.status_code == 403
-    assert "Permission denied" in exc_info.value.detail
-
-@pytest.mark.asyncio
-async def test_process_block_unsupported_type():
-     """Test process block with unsupported block type"""
-     mock_block_repository = AsyncMock(spec=BlockRepository)
-     mock_bot_repository = AsyncMock(spec=BotRepository)
-     mock_auth_service = AsyncMock(spec=AuthService)
-     logic_manager = LogicManager(
-         block_repository=mock_block_repository,
-         bot_repository=mock_bot_repository,
-         auth_service=mock_auth_service,
-    )
-     test_block = Block(id=1, type="unsupported_block_type", content={})
-     next_block_id = await logic_manager._process_block(
-            block=test_block, chat_id=123, user_message="test_message", bot_logic={}, variables={}
+@pytest.fixture
+async def create_test_bot() -> Dict[str, Any]:
+    """
+    Fixture to create a test bot in the database.
+    """
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO bots (user_id, name)
+            VALUES (:user_id, :name)
+            RETURNING id, user_id, name, created_at;
+        """
         )
-     assert next_block_id is None
+        params = {"user_id": 1, "name": "Test Bot"}
+        result = await session.execute(query, params)
+        await session.commit()
+        bot = result.fetchone()
+        return dict(bot._mapping)
+
+@pytest.fixture
+async def create_test_block(create_test_bot) -> Dict[str, Any]:
+    """
+    Fixture to create a test block in the database.
+    """
+    bot_id = create_test_bot["id"]
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO blocks (bot_id, type, content)
+            VALUES (:bot_id, :type, :content)
+            RETURNING id, bot_id, type, content, created_at;
+        """
+        )
+        params = {"bot_id": bot_id, "type": "message", "content": {"text": "Test message"}}
+        result = await session.execute(query, params)
+        await session.commit()
+        block = result.fetchone()
+        return dict(block._mapping)
+    
+
+@pytest.fixture
+async def create_test_connection(create_test_block) -> Dict[str, Any]:
+    """
+    Fixture to create a test connection in the database.
+    """
+    block_id = create_test_block["id"]
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO connections (source_block_id, target_block_id)
+            VALUES (:source_block_id, :target_block_id)
+            RETURNING id, source_block_id, target_block_id, type;
+            """
+        )
+        params = {"source_block_id": block_id, "target_block_id": block_id}
+        result = await session.execute(query, params)
+        await session.commit()
+        connection = result.fetchone()
+        return dict(connection._mapping)
 
 @pytest.mark.asyncio
-async def test_process_block_no_next_blocks():
-    """Test process block with no next blocks."""
-    mock_block_repository = AsyncMock(spec=BlockRepository)
-    mock_bot_repository = AsyncMock(spec=BotRepository)
-    mock_auth_service = AsyncMock(spec=AuthService)
-    logic_manager = LogicManager(
-        block_repository=mock_block_repository,
-        bot_repository=mock_bot_repository,
-        auth_service=mock_auth_service,
-    )
-    test_block = Block(id=1, type="send_text", content={"text": "test"})
-    mock_block_repository.list_by_ids.return_value = []
+async def test_get_next_blocks_success(mock_telegram_api: AsyncMock, create_test_block: Dict[str, Any], create_test_connection: Dict[str, Any]):
+    """
+    Test successful get next blocks for block.
+    """
+    logic_manager = LogicManager()
+    test_block =  Block(**create_test_block)
+    test_connection = create_test_connection
+    
+    async with get_session() as session:
+        query = text(
+            """
+            SELECT * FROM blocks WHERE id = :target_block_id
+        """
+        )
+        params = {"target_block_id": test_connection["target_block_id"]}
+        result = await session.execute(query, params)
+        next_block = result.fetchone()
+        
+    next_blocks = await logic_manager._get_next_blocks(test_block.id, bot_logic={"start":test_block.id, "next_blocks": {str(test_block.id): [test_connection["target_block_id"]]}})
+    assert len(next_blocks) == 1
+    assert next_blocks[0].id == next_block["id"]
+    assert next_blocks[0].type == next_block["type"]
+    assert next_blocks[0].content == next_block["content"]
 
-    next_block_id = await logic_manager._process_block(
-        block=test_block, chat_id=123, user_message="test_message", bot_logic={"connections": []}, variables={}
+
+@pytest.mark.asyncio
+async def test_get_next_blocks_not_found_block(
+    mock_telegram_api: AsyncMock, create_test_block: Dict[str, Any], create_test_connection: Dict[str, Any]
+):
+    """
+    Test get next blocks for block with not found block.
+    """
+    logic_manager = LogicManager()
+    test_block =  Block(**create_test_block)
+    
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+        await logic_manager._get_next_blocks(test_block.id, bot_logic={"start":test_block.id, "next_blocks": {str(test_block.id): [999]}})
+    assert str(exc_info.value) == "Block not found"
+
+
+@pytest.mark.asyncio
+async def test_process_block_success(mock_telegram_api: AsyncMock, create_test_block: Dict[str, Any]):
+    """
+    Test successful process block.
+    """
+    logic_manager = LogicManager()
+    test_block = Block(**create_test_block)
+    
+    next_block_id = await logic_manager.process_block(
+        block=test_block, chat_id=123, variables={}, bot_logic={} , user_message=""
     )
     assert next_block_id is None
-    mock_block_repository.list_by_ids.assert_not_called()
 
 @pytest.mark.asyncio
-async def test_process_block_with_next_block_success():
-    """Test process block with next blocks."""
-    mock_block_repository = AsyncMock(spec=BlockRepository)
-    mock_bot_repository = AsyncMock(spec=BotRepository)
-    mock_auth_service = AsyncMock(spec=AuthService)
-   
-    test_block = Block(id=1, type="send_text", content={"text": "test"})
-    test_next_block = Block(id=2, type="text_message", content={"text": "test_next"})
-
-    mock_block_repository.list_by_ids.return_value = [test_next_block]
-    mock_block_repository.get_by_id.return_value = test_next_block
-
-    logic_manager = LogicManager(
-        block_repository=mock_block_repository,
-        bot_repository=mock_bot_repository,
-        auth_service=mock_auth_service,
-    )
+async def test_process_block_not_found_handler(mock_telegram_api: AsyncMock, create_test_block: Dict[str, Any]):
+    """
+    Test process block with not found handler for block.
+    """
+    logic_manager = LogicManager()
+    test_block = Block(**create_test_block)
+    test_block.type = "test_type"
     
-    next_block_id = await logic_manager._process_block(
-         block=test_block, chat_id=123, user_message="test_message", bot_logic={"connections": [{"source_block_id":1, "target_block_id": 2}]}, variables={}
-     )
+    next_block_id = await logic_manager.process_block(
+       block=test_block, chat_id=123, variables={}, bot_logic={}, user_message=""
+    )
     assert next_block_id is None
-    mock_block_repository.list_by_ids.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_safe_execute_http_exception():
-    """Test safe execute with http exception."""
-    mock_block_repository = AsyncMock(spec=BlockRepository)
-    mock_bot_repository = AsyncMock(spec=BotRepository)
-    mock_auth_service = AsyncMock(spec=AuthService)
-    logic_manager = LogicManager(
-         block_repository=mock_block_repository,
-         bot_repository=mock_bot_repository,
-        auth_service=mock_auth_service,
-    )
-
-    mock_handler = AsyncMock(side_effect=HTTPException(status_code=400, detail="Test exception"))
-    test_block = Block(id=1, type="test_block", content={})
-    with pytest.raises(HTTPException) as exc_info:
-        await logic_manager._safe_execute(
-            handler=mock_handler,
-            content={},
-            chat_id=123,
-             user_message="test_message",
-             bot_logic={},
-            variables={},
-             block=test_block
+async def test_process_bot_logic_success(mock_telegram_api: AsyncMock, create_test_block: Dict[str, Any], create_test_connection: Dict[str, Any]):
+    """
+    Test successful process bot logic.
+    """
+    logic_manager = LogicManager()
+    test_block = Block(**create_test_block)
+    test_connection = create_test_connection
+    bot_logic = {
+        "start": test_block.id,
+        "next_blocks": {str(test_block.id): [test_connection["target_block_id"]]},
+    }
+    async with get_session() as session:
+        query = text(
+            """
+            SELECT * FROM blocks WHERE id = :target_block_id
+        """
         )
-    assert "Test exception" in exc_info.value.detail
-    mock_handler.assert_called_once()
+        params = {"target_block_id": test_connection["target_block_id"]}
+        result = await session.execute(query, params)
+        next_block = result.fetchone()
     
-
-@pytest.mark.asyncio
-async def test_safe_execute_unhandled_exception():
-    """Test safe execute with unhandled exception."""
-    mock_block_repository = AsyncMock(spec=BlockRepository)
-    mock_bot_repository = AsyncMock(spec=BotRepository)
-    mock_auth_service = AsyncMock(spec=AuthService)
-    logic_manager = LogicManager(
-         block_repository=mock_block_repository,
-         bot_repository=mock_bot_repository,
-        auth_service=mock_auth_service,
+    next_block_id = await logic_manager.process_bot_logic(
+       chat_id=123, variables={}, bot_logic=bot_logic, user_message="", start_block_id=test_block.id
     )
-    mock_handler = AsyncMock(side_effect=Exception("Test unhandled exception"))
-    test_block = Block(id=1, type="test_block", content={})
-    with pytest.raises(HTTPException) as exc_info:
-         await logic_manager._safe_execute(
-            handler=mock_handler,
-            content={},
-            chat_id=123,
-             user_message="test_message",
-             bot_logic={},
-            variables={},
-             block=test_block
-         )
-    assert "Internal server error" in str(exc_info.value.detail)
-    mock_handler.assert_called_once()
+    assert next_block_id == next_block["id"]

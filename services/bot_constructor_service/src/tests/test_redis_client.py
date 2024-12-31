@@ -1,76 +1,85 @@
 import pytest
 from unittest.mock import AsyncMock
-from src.integrations.redis_client import RedisClient
+from src.integrations.redis_client import redis_client
 from redis.exceptions import ConnectionError
+from src.config import settings
 
-@pytest.mark.asyncio
-async def test_redis_connect_success():
-    """Test Redis client connection successfully."""
-    mock_redis = AsyncMock()
-    redis_client = RedisClient(redis=mock_redis)
-    await redis_client.connect()
-    mock_redis.connect.assert_called_once()
 
-@pytest.mark.asyncio
-async def test_redis_connect_fail():
-    """Test Redis client connection fail."""
-    mock_redis = AsyncMock()
-    mock_redis.connect.side_effect = ConnectionError("Test connection error")
-    redis_client = RedisClient(redis=mock_redis)
-    with pytest.raises(ConnectionError):
-        await redis_client.connect()
-    mock_redis.connect.assert_called_once()
+@pytest.fixture
+def mock_redis_client() -> AsyncMock:
+    """
+    Fixture to create a mock Redis client.
+    """
+    mock = AsyncMock(spec=redis_client)
+    return mock
 
 
 @pytest.mark.asyncio
-async def test_redis_set_get_delete():
-    """Test set, get and delete operations on redis."""
-    mock_redis = AsyncMock()
-    redis_client = RedisClient(redis=mock_redis)
-    await redis_client.connect()
-    await redis_client.set("test_key", "test_value")
-    mock_redis.set.assert_called_once_with("test_key", "test_value")
+async def test_redis_set_get_success(mock_redis_client: AsyncMock):
+    """
+    Test successful setting and getting value from Redis.
+    """
+    key = "test_key"
+    value = "test_value"
+    mock_redis_client.set.return_value = True
+    mock_redis_client.get.return_value = value
 
-    mock_redis.get.return_value = "test_value"
-    value = await redis_client.get("test_key")
-    assert value == "test_value"
-    mock_redis.get.assert_called_once_with("test_key")
-    
-    await redis_client.delete("test_key")
-    mock_redis.delete.assert_called_once_with("test_key")
+    set_result = await redis_client.set(key, value)
+    get_result = await redis_client.get(key)
 
-@pytest.mark.asyncio
-async def test_redis_exists():
-    """Test redis exists method"""
-    mock_redis = AsyncMock()
-    redis_client = RedisClient(redis=mock_redis)
-    await redis_client.connect()
-    
-    mock_redis.exists.return_value = 1
-    exists = await redis_client.exists("test_key")
-    assert exists == True
-    mock_redis.exists.assert_called_once_with("test_key")
+    assert set_result is True
+    assert get_result == value
+    mock_redis_client.set.assert_called_once_with(key, value)
+    mock_redis_client.get.assert_called_once_with(key)
 
-    mock_redis.exists.return_value = 0
-    exists = await redis_client.exists("test_key")
-    assert exists == False
-    mock_redis.exists.assert_called_with("test_key")
 
 @pytest.mark.asyncio
-async def test_redis_setex():
-    """Test redis setex method"""
-    mock_redis = AsyncMock()
-    redis_client = RedisClient(redis=mock_redis)
-    await redis_client.connect()
-    
-    await redis_client.setex("test_key", 10, "test_value")
-    mock_redis.setex.assert_called_once_with("test_key", 10, "test_value")
+async def test_redis_set_fail(mock_redis_client: AsyncMock):
+    """
+    Test setting value to redis with connection error.
+    """
+    key = "test_key"
+    value = "test_value"
+    mock_redis_client.set.side_effect = ConnectionError("Test Connection Error")
+
+    with pytest.raises(ConnectionError) as exc_info:
+        await redis_client.set(key, value)
+    assert "Test Connection Error" in str(exc_info.value)
+    mock_redis_client.set.assert_called_once_with(key, value)
+
 
 @pytest.mark.asyncio
-async def test_redis_close():
-    """Test redis client close method"""
-    mock_redis = AsyncMock()
-    redis_client = RedisClient(redis=mock_redis)
-    await redis_client.connect()
-    await redis_client.close()
-    mock_redis.close.assert_called_once()
+async def test_redis_get_fail(mock_redis_client: AsyncMock):
+    """
+    Test getting value from redis with connection error.
+    """
+    key = "test_key"
+    mock_redis_client.get.side_effect = ConnectionError("Test Connection Error")
+    with pytest.raises(ConnectionError) as exc_info:
+        await redis_client.get(key)
+    assert "Test Connection Error" in str(exc_info.value)
+    mock_redis_client.get.assert_called_once_with(key)
+
+
+@pytest.mark.asyncio
+async def test_redis_delete_success(mock_redis_client: AsyncMock):
+    """
+    Test successful deleting value from Redis.
+    """
+    key = "test_key"
+    mock_redis_client.delete.return_value = 1
+    delete_result = await redis_client.delete(key)
+    assert delete_result == 1
+    mock_redis_client.delete.assert_called_once_with(key)
+
+@pytest.mark.asyncio
+async def test_redis_delete_fail(mock_redis_client: AsyncMock):
+    """
+    Test deleting value from redis with connection error.
+    """
+    key = "test_key"
+    mock_redis_client.delete.side_effect = ConnectionError("Test Connection Error")
+    with pytest.raises(ConnectionError) as exc_info:
+        await redis_client.delete(key)
+    assert "Test Connection Error" in str(exc_info.value)
+    mock_redis_client.delete.assert_called_once_with(key)

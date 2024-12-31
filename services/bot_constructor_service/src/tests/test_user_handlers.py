@@ -1,197 +1,247 @@
 import pytest
 from unittest.mock import AsyncMock
+from src.core.logic_manager.handlers import user_handlers
+from src.integrations.telegram import TelegramAPI
+from src.core.utils.exceptions import ObjectNotFoundException
 from typing import Dict, Any
-import json
-from src.core.logic_manager.handlers.user_handlers import UserHandler
-from src.integrations.redis_client import redis_client
+from src.db import get_session
+from sqlalchemy import text
+
+
+@pytest.fixture
+def mock_telegram_api() -> AsyncMock:
+    """
+    Fixture to create a mock TelegramAPI client.
+    """
+    mock = AsyncMock(spec=TelegramAPI)
+    mock.send_message.return_value = {"ok": True}
+    return mock
+
+@pytest.fixture
+async def create_test_bot() -> Dict[str, Any]:
+    """
+    Fixture to create a test bot in the database.
+    """
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO bots (user_id, name)
+            VALUES (:user_id, :name)
+            RETURNING id, user_id, name, created_at;
+        """
+        )
+        params = {"user_id": 1, "name": "Test Bot"}
+        result = await session.execute(query, params)
+        await session.commit()
+        bot = result.fetchone()
+        return dict(bot._mapping)
+    
+@pytest.fixture
+async def create_test_block(create_test_bot) -> Dict[str, Any]:
+    """
+    Fixture to create a test block in the database.
+    """
+    bot_id = create_test_bot["id"]
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO blocks (bot_id, type, content)
+            VALUES (:bot_id, :type, :content)
+            RETURNING id, bot_id, type, content, created_at;
+        """
+        )
+        params = {"bot_id": bot_id, "type": "message", "content": {"text": "Test message"}}
+        result = await session.execute(query, params)
+        await session.commit()
+        block = result.fetchone()
+        return dict(block._mapping)
 
 
 @pytest.mark.asyncio
-async def test_handle_save_user_data_new_data():
-    """Test saving new user data."""
-    mock_redis = AsyncMock()
-    handler = UserHandler()
-    handler.redis_client = mock_redis
-    test_block = {
-        "id": 1,
-        "type": "save_user_data",
-        "content": {"data": {"key1": "value1"}},
-    }
-    await handler.handle_save_user_data(
-        block=test_block, chat_id=123, variables={}
+async def test_save_user_data_success(
+    mock_telegram_api: AsyncMock,
+    create_test_block: Dict[str, Any]
+):
+    """
+    Test successful saving user data.
+    """
+    block_id = create_test_block["id"]
+    chat_id = 123
+    user_id = 456
+    test_data = {"block_id": block_id, "chat_id": chat_id, "user_id": user_id, "data": {"test_key": "test_value"}}
+    
+    result = await user_handlers.save_user_data(
+        mock_telegram_api, test_data
     )
-    mock_redis.set.assert_called_once_with(
-        "user_data:123", '{"key1": "value1"}'
-    )
+    assert result is not None
 
 @pytest.mark.asyncio
-async def test_handle_save_user_data_update_data():
-    """Test updating existing user data."""
-    mock_redis = AsyncMock()
-    mock_redis.get.return_value = '{"key1": "old_value"}'
-    handler = UserHandler()
-    handler.redis_client = mock_redis
-    test_block = {
-        "id": 1,
-        "type": "save_user_data",
-        "content": {"data": {"key2": "value2"}},
-    }
-    await handler.handle_save_user_data(
-        block=test_block, chat_id=123, variables={}
-    )
-    mock_redis.set.assert_called_once_with(
-        "user_data:123", '{"key1": "old_value", "key2": "value2"}'
-    )
-
+async def test_save_user_data_not_found_block(
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test save user data with not found block.
+    """
+    block_id = 999
+    chat_id = 123
+    user_id = 456
+    test_data = {"block_id": block_id, "chat_id": chat_id, "user_id": user_id, "data": {"test_key": "test_value"}}
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+        await user_handlers.save_user_data(mock_telegram_api, test_data)
+    assert str(exc_info.value) == "Block not found"
 
 @pytest.mark.asyncio
-async def test_handle_save_user_data_template_value():
-    """Test saving user data using a template."""
-    mock_redis = AsyncMock()
-    handler = UserHandler()
-    handler.redis_client = mock_redis
-    variables = {"name": "TestUser"}
-    test_block = {
-         "id": 1,
-        "type": "save_user_data",
-        "content": {"data": "Hello, {{name}}!"},
-    }
-    await handler.handle_save_user_data(
-        block=test_block, chat_id=123, variables=variables
-    )
-    mock_redis.set.assert_called_once_with(
-        "user_data:123", json.dumps("Hello, TestUser!")
-    )
-
-
-@pytest.mark.asyncio
-async def test_handle_retrieve_user_data_success():
-    """Test retrieving user data successfully."""
-    mock_redis = AsyncMock()
-    mock_redis.get.return_value = '{"key1": "value1", "key2": "value2"}'
-    handler = UserHandler()
-    handler.redis_client = mock_redis
-    test_block = {
-         "id": 1,
-        "type": "retrieve_user_data",
-        "content": {"key": "key1"},
-    }
-    variables = {}
-    retrieved_data = await handler.handle_retrieve_user_data(
-         block=test_block, chat_id=123, variables=variables
-    )
-    assert retrieved_data == "value1"
-    mock_redis.get.assert_called_once_with("user_data:123")
-
+async def test_retrieve_user_data_success(
+    mock_telegram_api: AsyncMock,
+    create_test_block: Dict[str, Any]
+):
+    """
+    Test successful retrieve user data.
+    """
+    block_id = create_test_block["id"]
+    chat_id = 123
+    user_id = 456
+    test_data = {"block_id": block_id, "chat_id": chat_id, "user_id": user_id, "key": "test_key"}
+    async with get_session() as session:
+          query = text(
+             """
+             INSERT INTO user_data (block_id, chat_id, user_id, data)
+            VALUES (:block_id, :chat_id, :user_id, :data)
+           """
+        )
+          params = {
+             "block_id": block_id,
+             "chat_id": chat_id,
+            "user_id": user_id,
+              "data": {"test_key": "test_value"}
+        }
+          await session.execute(query, params)
+          await session.commit()
+    
+    result = await user_handlers.retrieve_user_data(mock_telegram_api, test_data)
+    assert result == "test_value"
 
 @pytest.mark.asyncio
-async def test_handle_retrieve_user_data_all_data():
-    """Test retrieving all user data successfully."""
-    mock_redis = AsyncMock()
-    mock_redis.get.return_value = '{"key1": "value1", "key2": "value2"}'
-    handler = UserHandler()
-    handler.redis_client = mock_redis
-    test_block = {
-        "id": 1,
-        "type": "retrieve_user_data",
-        "content": {},
-    }
-    variables = {}
-    retrieved_data = await handler.handle_retrieve_user_data(
-        block=test_block, chat_id=123, variables=variables
-    )
-    assert retrieved_data == {"key1": "value1", "key2": "value2"}
-    mock_redis.get.assert_called_once_with("user_data:123")
-
+async def test_retrieve_user_data_not_found_block(
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test retrieve user data with not found block.
+    """
+    block_id = 999
+    chat_id = 123
+    user_id = 456
+    test_data = {"block_id": block_id, "chat_id": chat_id, "user_id": user_id, "key": "test_key"}
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+        await user_handlers.retrieve_user_data(mock_telegram_api, test_data)
+    assert str(exc_info.value) == "Block not found"
 
 @pytest.mark.asyncio
-async def test_handle_retrieve_user_data_not_found():
-    """Test retrieving user data when key is not found."""
-    mock_redis = AsyncMock()
-    mock_redis.get.return_value = None
-    handler = UserHandler()
-    handler.redis_client = mock_redis
-    test_block = {
-        "id": 1,
-        "type": "retrieve_user_data",
-        "content": {"key": "key1"},
-    }
-    variables = {}
-    retrieved_data = await handler.handle_retrieve_user_data(
-        block=test_block, chat_id=123, variables=variables
-    )
-    assert retrieved_data is None
-    mock_redis.get.assert_called_once_with("user_data:123")
+async def test_retrieve_user_data_not_found_key(
+    mock_telegram_api: AsyncMock,
+    create_test_block: Dict[str, Any]
+):
+    """
+    Test retrieve user data with not found key.
+    """
+    block_id = create_test_block["id"]
+    chat_id = 123
+    user_id = 456
+    test_data = {"block_id": block_id, "chat_id": chat_id, "user_id": user_id, "key": "not_found_key"}
+    
+    async with get_session() as session:
+          query = text(
+             """
+             INSERT INTO user_data (block_id, chat_id, user_id, data)
+            VALUES (:block_id, :chat_id, :user_id, :data)
+           """
+        )
+          params = {
+             "block_id": block_id,
+             "chat_id": chat_id,
+            "user_id": user_id,
+              "data": {"test_key": "test_value"}
+        }
+          await session.execute(query, params)
+          await session.commit()
+        
+    result = await user_handlers.retrieve_user_data(mock_telegram_api, test_data)
+    assert result is None
 
 
 @pytest.mark.asyncio
-async def test_handle_clear_user_data_success():
-    """Test clearing user data successfully."""
-    mock_redis = AsyncMock()
-    handler = UserHandler()
-    handler.redis_client = mock_redis
-    test_block = {
-         "id": 1,
-        "type": "clear_user_data",
-         "content": {},
-    }
-    await handler.handle_clear_user_data(
-         block=test_block, chat_id=123, variables={}
-    )
-    mock_redis.delete.assert_called_once_with("user_data:123")
+async def test_clear_user_data_success(
+    mock_telegram_api: AsyncMock,
+    create_test_block: Dict[str, Any]
+):
+    """
+    Test successful clear user data.
+    """
+    block_id = create_test_block["id"]
+    chat_id = 123
+    user_id = 456
+    test_data = {"block_id": block_id, "chat_id": chat_id, "user_id": user_id}
+    
+    async with get_session() as session:
+        query = text(
+             """
+             INSERT INTO user_data (block_id, chat_id, user_id, data)
+            VALUES (:block_id, :chat_id, :user_id, :data)
+           """
+        )
+        params = {
+             "block_id": block_id,
+             "chat_id": chat_id,
+            "user_id": user_id,
+              "data": {"test_key": "test_value"}
+        }
+        await session.execute(query, params)
+        await session.commit()
+    
+    result = await user_handlers.clear_user_data(mock_telegram_api, test_data)
+    assert result is not None
 
 @pytest.mark.asyncio
-async def test_handle_manage_session_new_data():
-     """Test manage session new data."""
-     mock_redis = AsyncMock()
-     handler = UserHandler()
-     handler.redis_client = mock_redis
-     test_block = {
-         "id": 1,
-        "type": "manage_session",
-        "content": {"session_data": {"session_key": "session_value"}},
-    }
-     await handler.handle_manage_session(
-        block=test_block, chat_id=123, variables={}
-    )
-     mock_redis.set.assert_called_once_with(
-         "session:123", '{"session_key": "session_value"}'
-    )
+async def test_clear_user_data_not_found_block(
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test clear user data with not found block.
+    """
+    block_id = 999
+    chat_id = 123
+    user_id = 456
+    test_data = {"block_id": block_id, "chat_id": chat_id, "user_id": user_id}
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+      await user_handlers.clear_user_data(mock_telegram_api, test_data)
+    assert str(exc_info.value) == "Block not found"
 
 @pytest.mark.asyncio
-async def test_handle_manage_session_update_data():
-    """Test manage session update data."""
-    mock_redis = AsyncMock()
-    mock_redis.get.return_value = '{"session_key": "old_value"}'
-    handler = UserHandler()
-    handler.redis_client = mock_redis
-    test_block = {
-        "id": 1,
-        "type": "manage_session",
-        "content": {"session_data": {"session_key2": "new_value"}},
-    }
-    await handler.handle_manage_session(
-       block=test_block, chat_id=123, variables={}
-    )
-    mock_redis.set.assert_called_once_with(
-        "session:123", '{"session_key": "old_value", "session_key2": "new_value"}'
-    )
+async def test_manage_session_success(
+    mock_telegram_api: AsyncMock,
+     create_test_block: Dict[str, Any]
+):
+    """
+    Test successful manage user session.
+    """
+    block_id = create_test_block["id"]
+    chat_id = 123
+    user_id = 456
+    test_data = {"block_id": block_id, "chat_id": chat_id, "user_id": user_id, "action": "start"}
+    result = await user_handlers.manage_session(mock_telegram_api, test_data)
+    assert result is not None
 
 @pytest.mark.asyncio
-async def test_handle_manage_session_template_value():
-    """Test manage session with template value."""
-    mock_redis = AsyncMock()
-    handler = UserHandler()
-    handler.redis_client = mock_redis
-    variables = {"test": "test_value"}
-    test_block = {
-        "id": 1,
-        "type": "manage_session",
-         "content": {"session_data": "Session {{test}}"},
-    }
-    await handler.handle_manage_session(
-        block=test_block, chat_id=123, variables=variables
-    )
-    mock_redis.set.assert_called_once_with(
-       "session:123", json.dumps("Session test_value")
-    )
+async def test_manage_session_not_found_block(
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test manage user session with not found block.
+    """
+    block_id = 999
+    chat_id = 123
+    user_id = 456
+    test_data = {"block_id": block_id, "chat_id": chat_id, "user_id": user_id, "action": "start"}
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+      await user_handlers.manage_session(mock_telegram_api, test_data)
+    assert str(exc_info.value) == "Block not found"

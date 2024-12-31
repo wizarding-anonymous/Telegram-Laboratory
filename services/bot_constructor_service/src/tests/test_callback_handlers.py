@@ -1,83 +1,176 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from fastapi import HTTPException
-
-from src.core.logic_manager.handlers.callback_handlers import CallbackHandler
-from src.integrations.telegram.client import TelegramClient
-from src.core.utils.exceptions import TelegramAPIException
-from src.core.logic_manager.base import Block
-
-@pytest.mark.asyncio
-async def test_handle_callback_query_success():
-    """Test successful callback query handling."""
-    mock_client = AsyncMock(spec=TelegramClient)
-    handler = CallbackHandler(telegram_client=mock_client)
-    test_block = {
-        "id": 1,
-        "type": "handle_callback_query",
-        "content": {"data": "test_callback_data"},
-    }
-    variables = {"variable_test": "test_var"}
-    callback_data = await handler.handle_callback_query(
-        block=test_block, chat_id=123, variables=variables
-    )
-    assert callback_data == "test_callback_data"
+from unittest.mock import AsyncMock
+from src.core.logic_manager.handlers import callback_handlers
+from src.integrations.telegram import TelegramAPI
+from src.core.utils.exceptions import ObjectNotFoundException
+from typing import Dict, Any
+from src.db import get_session
+from sqlalchemy import text
 
 
-@pytest.mark.asyncio
-async def test_handle_send_callback_response_success():
-    """Test send callback response successfully."""
-    mock_client = AsyncMock(spec=TelegramClient)
-    handler = CallbackHandler(telegram_client=mock_client)
-    test_block = {
-       "id": 1,
-        "type": "send_callback_response",
-        "content": {"text": "test_callback_text"},
-    }
-    variables = {"variable_test": "test_var", "callback_query_id": 1}
-    await handler.handle_send_callback_response(
-      block=test_block, chat_id=123, variables=variables
-    )
-    mock_client.answer_callback_query.assert_called_once_with(callback_query_id=1, text="test_callback_text")
+@pytest.fixture
+def mock_telegram_api() -> AsyncMock:
+    """
+    Fixture to create a mock TelegramAPI client.
+    """
+    mock = AsyncMock(spec=TelegramAPI)
+    mock.send_message.return_value = {"ok": True}
+    return mock
 
 
-@pytest.mark.asyncio
-async def test_handle_send_callback_response_no_text():
-    """Test send callback response with no text."""
-    mock_client = AsyncMock(spec=TelegramClient)
-    handler = CallbackHandler(telegram_client=mock_client)
-    test_block = {
-         "id": 1,
-        "type": "send_callback_response",
-         "content": {},
-    }
-    variables = {"variable_test": "test_var", "callback_query_id": 1}
-    await handler.handle_send_callback_response(
-        block=test_block, chat_id=123, variables=variables
-    )
-    mock_client.answer_callback_query.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_handle_send_callback_response_api_error():
-    """Test send callback response with API error."""
-    mock_client = AsyncMock(spec=TelegramClient)
-    mock_client.answer_callback_query.side_effect = Exception("Telegram API error")
-
-    test_token = 'test_token'
-    telegram_client = TelegramClient(bot_token=test_token)
-
-    handler = CallbackHandler(telegram_client=telegram_client)
-    test_block = {
-         "id": 1,
-        "type": "send_callback_response",
-        "content": {"text": "test_callback_text"},
-    }
-    variables = {"variable_test": "test_var", "callback_query_id": 1}
-    
-    with pytest.raises(TelegramAPIException) as exc_info:
-          await handler.handle_send_callback_response(
-            block=test_block, chat_id=123, variables=variables
+@pytest.fixture
+async def create_test_bot() -> Dict[str, Any]:
+    """
+    Fixture to create a test bot in the database.
+    """
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO bots (user_id, name)
+            VALUES (:user_id, :name)
+            RETURNING id, user_id, name, created_at;
+        """
         )
-    assert "Telegram API error" in str(exc_info.value)
-    mock_client.answer_callback_query.assert_called_once_with(callback_query_id=1, text="test_callback_text")
+        params = {"user_id": 1, "name": "Test Bot"}
+        result = await session.execute(query, params)
+        await session.commit()
+        bot = result.fetchone()
+        return dict(bot._mapping)
+
+@pytest.fixture
+async def create_test_block(create_test_bot) -> Dict[str, Any]:
+    """
+    Fixture to create a test block in the database.
+    """
+    bot_id = create_test_bot["id"]
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO blocks (bot_id, type, content)
+            VALUES (:bot_id, :type, :content)
+            RETURNING id, bot_id, type, content, created_at;
+        """
+        )
+        params = {"bot_id": bot_id, "type": "message", "content": {"text": "Test message"}}
+        result = await session.execute(query, params)
+        await session.commit()
+        block = result.fetchone()
+        return dict(block._mapping)
+
+@pytest.fixture
+async def create_test_callback(create_test_block) -> Dict[str, Any]:
+    """
+    Fixture to create a test callback in the database.
+    """
+    block_id = create_test_block["id"]
+    async with get_session() as session:
+         query = text(
+            """
+            INSERT INTO callbacks (block_id, data)
+            VALUES (:block_id, :data)
+            RETURNING id, block_id, data, created_at;
+            """
+        )
+         params = {"block_id": block_id, "data": "test_callback_data"}
+         result = await session.execute(query, params)
+         await session.commit()
+         callback = result.fetchone()
+         return dict(callback._mapping)
+
+
+@pytest.mark.asyncio
+async def test_process_callback_query_success(
+    mock_telegram_api: AsyncMock,
+    create_test_callback: Dict[str, Any],
+    create_test_block: Dict[str, Any]
+):
+    """
+    Test successful processing of a callback query.
+    """
+    callback_id = create_test_callback["id"]
+    block_id = create_test_block["id"]
+    chat_id = 123
+    user_id = 456
+    
+    test_data = {
+        "callback_id": callback_id,
+        "chat_id": chat_id,
+        "user_id": user_id,
+        "data": "test_callback_data"
+    }
+    
+    result = await callback_handlers.process_callback_query(
+        mock_telegram_api, test_data
+    )
+    assert result is not None
+    mock_telegram_api.send_message.assert_called_once()
+    mock_telegram_api.send_message.assert_called_with(chat_id=chat_id, text="Test message")
+
+
+@pytest.mark.asyncio
+async def test_process_callback_query_not_found(
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test processing callback query when callback not found.
+    """
+    callback_id = 999
+    chat_id = 123
+    user_id = 456
+    test_data = {
+        "callback_id": callback_id,
+        "chat_id": chat_id,
+        "user_id": user_id,
+        "data": "test_callback_data"
+    }
+    with pytest.raises(ObjectNotFoundException) as exc_info:
+        await callback_handlers.process_callback_query(
+            mock_telegram_api, test_data
+        )
+    assert str(exc_info.value) == "Callback not found"
+    mock_telegram_api.send_message.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_process_callback_query_with_template_success(
+    mock_telegram_api: AsyncMock,
+    create_test_callback: Dict[str, Any],
+    create_test_block: Dict[str, Any]
+):
+    """
+    Test successful processing of a callback query with template.
+    """
+    callback_id = create_test_callback["id"]
+    block_id = create_test_block["id"]
+    chat_id = 123
+    user_id = 456
+    
+    test_data = {
+        "callback_id": callback_id,
+        "chat_id": chat_id,
+        "user_id": user_id,
+        "data": "test_callback_data",
+         "template_context":  {"test_var": "test_value_from_user"}
+    }
+    
+    async with get_session() as session:
+        query = text(
+             """
+             UPDATE blocks
+            SET content = :content
+            WHERE id = :block_id
+           """
+        )
+        params = {
+             "block_id": block_id,
+             "content": {"text": "Test message with var: {{ test_var }}"}
+        }
+        await session.execute(query, params)
+        await session.commit()
+    
+    
+    result = await callback_handlers.process_callback_query(
+        mock_telegram_api, test_data
+    )
+    assert result is not None
+    mock_telegram_api.send_message.assert_called_once()
+    mock_telegram_api.send_message.assert_called_with(chat_id=chat_id, text="Test message with var: test_value_from_user")

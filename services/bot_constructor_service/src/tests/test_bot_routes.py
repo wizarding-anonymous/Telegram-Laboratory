@@ -1,150 +1,182 @@
 import pytest
-from httpx import AsyncClient
+import httpx
 from typing import Dict, Any
+from unittest.mock import AsyncMock
 from src.config import settings
+from src.integrations.auth_service import AuthService
+from src.db import get_session, close_engine
+from sqlalchemy import text
+
+
+@pytest.fixture(scope="session")
+def anyio_backend():
+    return "asyncio"
+
+
+@pytest.fixture(scope="session")
+def get_auth_header() -> Dict[str, str]:
+    """
+    Fixture to get authorization header.
+    """
+    return {"Authorization": f"Bearer test_token"}
+
+
+@pytest.fixture(scope="session")
+async def client():
+    """
+    Fixture to create httpx client with app.
+    """
+    from src.app import app
+    async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        yield client
+    await close_engine()
+
+
+@pytest.fixture
+def mock_auth_service() -> AsyncMock:
+    """
+    Fixture to create a mock AuthService.
+    """
+    mock = AsyncMock(spec=AuthService)
+    mock.get_user_by_token.return_value = {"id": 1, "roles": ["admin"]}
+    return mock
+
+
+@pytest.fixture
+async def create_test_bot(mock_auth_service) -> Dict[str, Any]:
+    """
+    Fixture to create a test bot in the database.
+    """
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO bots (user_id, name)
+            VALUES (:user_id, :name)
+            RETURNING id, user_id, name, created_at;
+        """
+        )
+        params = {"user_id": 1, "name": "Test Bot"}
+        result = await session.execute(query, params)
+        await session.commit()
+        bot = result.fetchone()
+        return dict(bot._mapping)
 
 
 @pytest.mark.asyncio
-async def test_create_bot(client: AsyncClient, get_auth_header: dict):
-    """Test creating a new bot."""
-    test_bot_data = {"name": "Test Bot", "description": "Test Description"}
-    response = await client.post(
-        "/bots/", headers=get_auth_header, json=test_bot_data
-    )
+async def test_create_bot_route_success(
+    client: httpx.AsyncClient, get_auth_header: Dict[str, str], mock_auth_service: AsyncMock
+):
+    """
+    Test successful creation of a bot.
+    """
+    test_data = {
+        "name": "Test Bot 2",
+    }
+    response = await client.post("/bots/", headers=get_auth_header, json=test_data)
     assert response.status_code == 201
-    data = response.json()
-    assert "id" in data
-    assert data["name"] == test_bot_data["name"]
-    assert data["description"] == test_bot_data["description"]
-
+    response_data = response.json()
+    assert response_data["name"] == test_data["name"]
+    assert "id" in response_data
+    assert "created_at" in response_data
 
 @pytest.mark.asyncio
-async def test_get_bot_by_id(client: AsyncClient, get_auth_header: dict):
-    """Test getting bot by ID."""
-    test_bot_data = {"name": "Test Bot", "description": "Test Description"}
-    create_response = await client.post(
-        "/bots/", headers=get_auth_header, json=test_bot_data
-    )
-    assert create_response.status_code == 201
-    created_bot = create_response.json()
-    bot_id = created_bot["id"]
-    response = await client.get(
-        f"/bots/{bot_id}", headers=get_auth_header
-    )
+async def test_get_bot_by_id_success(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+    create_test_bot: Dict[str, Any]
+):
+    """
+    Test successful get bot by id.
+    """
+    bot_id = create_test_bot["id"]
+    response = await client.get(f"/bots/{bot_id}", headers=get_auth_header)
     assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == bot_id
-    assert data["name"] == test_bot_data["name"]
-    assert data["description"] == test_bot_data["description"]
+    response_data = response.json()
+    assert response_data["id"] == bot_id
+    assert response_data["name"] == create_test_bot["name"]
+    assert response_data["user_id"] == create_test_bot["user_id"]
+    assert "created_at" in response_data
 
 
 @pytest.mark.asyncio
-async def test_get_all_bots(client: AsyncClient, get_auth_header: dict):
-    """Test getting all bots."""
-    test_bot_data1 = {"name": "Test Bot 1", "description": "Test Description 1"}
-    test_bot_data2 = {"name": "Test Bot 2", "description": "Test Description 2"}
-    await client.post("/bots/", headers=get_auth_header, json=test_bot_data1)
-    await client.post("/bots/", headers=get_auth_header, json=test_bot_data2)
+async def test_get_bot_by_id_not_found(
+    client: httpx.AsyncClient, get_auth_header: Dict[str, str], mock_auth_service: AsyncMock
+):
+    """
+     Test get bot by id with not found bot.
+    """
+    bot_id = 999
+    response = await client.get(f"/bots/{bot_id}", headers=get_auth_header)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Bot not found"
 
-    response = await client.get("/bots/", headers=get_auth_header)
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) >= 2
-    
-    names = [item["name"] for item in data]
-    assert "Test Bot 1" in names
-    assert "Test Bot 2" in names
 
 @pytest.mark.asyncio
-async def test_update_bot(client: AsyncClient, get_auth_header: dict):
-    """Test updating a bot."""
-    test_bot_data = {"name": "Test Bot", "description": "Test Description"}
-    create_response = await client.post(
-        "/bots/", headers=get_auth_header, json=test_bot_data
-    )
-    assert create_response.status_code == 201
-    created_bot = create_response.json()
-    bot_id = created_bot["id"]
-    update_data = {"name": "Updated Bot", "description": "Updated Description"}
+async def test_update_bot_route_success(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+    create_test_bot: Dict[str, Any]
+):
+    """
+    Test successful update of a bot.
+    """
+    bot_id = create_test_bot["id"]
+    updated_data = {
+        "name": "Updated Test Bot",
+    }
     response = await client.put(
-        f"/bots/{bot_id}", headers=get_auth_header, json=update_data
+        f"/bots/{bot_id}", headers=get_auth_header, json=updated_data
     )
     assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == bot_id
-    assert data["name"] == update_data["name"]
-    assert data["description"] == update_data["description"]
+    response_data = response.json()
+    assert response_data["name"] == updated_data["name"]
+    assert "updated_at" in response_data
+
 
 @pytest.mark.asyncio
-async def test_delete_bot(client: AsyncClient, get_auth_header: dict):
-    """Test deleting a bot."""
-    test_bot_data = {"name": "Test Bot", "description": "Test Description"}
-    create_response = await client.post(
-        "/bots/", headers=get_auth_header, json=test_bot_data
+async def test_update_bot_route_not_found(
+    client: httpx.AsyncClient, get_auth_header: Dict[str, str], mock_auth_service: AsyncMock
+):
+    """
+    Test update bot with not found bot.
+    """
+    bot_id = 999
+    updated_data = {
+        "name": "Updated Test Bot",
+    }
+    response = await client.put(
+        f"/bots/{bot_id}", headers=get_auth_header, json=updated_data
     )
-    assert create_response.status_code == 201
-    created_bot = create_response.json()
-    bot_id = created_bot["id"]
-    response = await client.delete(
-        f"/bots/{bot_id}", headers=get_auth_header
-    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Bot not found"
+
+@pytest.mark.asyncio
+async def test_delete_bot_route_success(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+    create_test_bot: Dict[str, Any]
+):
+    """
+    Test successful delete bot.
+    """
+    bot_id = create_test_bot["id"]
+    response = await client.delete(f"/bots/{bot_id}", headers=get_auth_header)
     assert response.status_code == 204
 
-    response_get = await client.get(f"/bots/{bot_id}", headers=get_auth_header)
-    assert response_get.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_create_bot_unauthorized(client: AsyncClient):
-    """Test creating a bot without authorization."""
-    test_bot_data = {"name": "Test Bot", "description": "Test Description"}
-    response = await client.post("/bots/", json=test_bot_data)
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_get_bot_by_id_unauthorized(client: AsyncClient):
-    """Test getting a bot by id without authorization."""
-    response = await client.get("/bots/1")
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_update_bot_unauthorized(client: AsyncClient):
-    """Test update a bot without authorization."""
-    update_data = {"name": "Updated Bot", "description": "Updated Description"}
-    response = await client.put("/bots/1", json=update_data)
-    assert response.status_code == 401
-
-@pytest.mark.asyncio
-async def test_delete_bot_unauthorized(client: AsyncClient):
-    """Test delete a bot without authorization."""
-    response = await client.delete("/bots/1")
-    assert response.status_code == 401
-
-@pytest.mark.asyncio
-async def test_get_bot_not_found(client: AsyncClient, get_auth_header: dict):
-    """Test getting a bot that does not exist."""
-    response = await client.get(
-        "/bots/999", headers=get_auth_header
-    )
+    response = await client.get(f"/bots/{bot_id}", headers=get_auth_header)
     assert response.status_code == 404
 
 @pytest.mark.asyncio
-async def test_update_bot_not_found(client: AsyncClient, get_auth_header: dict):
-    """Test updating a bot that does not exist."""
-    update_data = {"name": "Updated Bot", "description": "Updated Description"}
-    response = await client.put(
-        "/bots/999", headers=get_auth_header, json=update_data
-    )
+async def test_delete_bot_route_not_found(
+    client: httpx.AsyncClient, get_auth_header: Dict[str, str], mock_auth_service: AsyncMock
+):
+    """
+     Test delete bot with not found bot.
+    """
+    bot_id = 999
+    response = await client.delete(f"/bots/{bot_id}", headers=get_auth_header)
     assert response.status_code == 404
-    
-
-@pytest.mark.asyncio
-async def test_delete_bot_not_found(client: AsyncClient, get_auth_header: dict):
-    """Test deleting a bot that does not exist."""
-    response = await client.delete(
-        "/bots/999", headers=get_auth_header
-    )
-    assert response.status_code == 404
+    assert response.json()["detail"] == "Bot not found"

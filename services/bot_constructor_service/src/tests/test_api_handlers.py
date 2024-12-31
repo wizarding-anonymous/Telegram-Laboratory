@@ -1,269 +1,441 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from httpx import AsyncClient, Response
-from fastapi import HTTPException
+import httpx
+from typing import Dict, Any
+from unittest.mock import AsyncMock
+from src.app import app
+from src.config import settings
+from src.integrations.auth_service import AuthService
+from src.db import get_session, close_engine
+from sqlalchemy import text
+from src.core.utils.exceptions import ObjectNotFoundException
+from src.core.logic_manager.handlers import api_handlers
+from src.integrations.telegram import TelegramAPI
+from src.integrations.redis_client import redis_client
 
-from src.core.logic_manager.handlers.api_handlers import ApiRequestHandler
-from src.integrations.telegram.client import TelegramClient
-from src.core.utils.exceptions import TelegramAPIException
 
+@pytest.fixture(scope="session")
+def anyio_backend():
+    return "asyncio"
+
+
+@pytest.fixture(scope="session")
+def get_auth_header() -> Dict[str, str]:
+    """
+    Fixture to get authorization header.
+    """
+    return {"Authorization": f"Bearer test_token"}
+
+
+@pytest.fixture(scope="session")
+async def client():
+    """
+    Fixture to create httpx client with app.
+    """
+    async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        yield client
+    await close_engine()
+
+
+@pytest.fixture
+def mock_auth_service() -> AsyncMock:
+    """
+    Fixture to create a mock AuthService.
+    """
+    mock = AsyncMock(spec=AuthService)
+    mock.get_user_by_token.return_value = {"id": 1, "roles": ["admin"]}
+    return mock
+
+
+@pytest.fixture
+def mock_telegram_api() -> AsyncMock:
+    """
+    Fixture to create a mock TelegramAPI client.
+    """
+    mock = AsyncMock(spec=TelegramAPI)
+    mock.send_message.return_value = {"ok": True}
+    return mock
+
+
+@pytest.fixture
+async def create_test_bot(mock_auth_service) -> Dict[str, Any]:
+    """
+    Fixture to create a test bot in the database.
+    """
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO bots (user_id, name)
+            VALUES (:user_id, :name)
+            RETURNING id, user_id, name, created_at;
+        """
+        )
+        params = {"user_id": 1, "name": "Test Bot"}
+        result = await session.execute(query, params)
+        await session.commit()
+        bot = result.fetchone()
+        return dict(bot._mapping)
+
+
+@pytest.fixture
+async def create_test_block(create_test_bot) -> Dict[str, Any]:
+    """
+    Fixture to create a test block in the database.
+    """
+    bot_id = create_test_bot["id"]
+    async with get_session() as session:
+        query = text(
+            """
+            INSERT INTO blocks (bot_id, type, content)
+            VALUES (:bot_id, :type, :content)
+            RETURNING id, bot_id, type, content, created_at;
+        """
+        )
+        params = {"bot_id": bot_id, "type": "message", "content": {"text": "Test message"}}
+        result = await session.execute(query, params)
+        await session.commit()
+        block = result.fetchone()
+        return dict(block._mapping)
 
 @pytest.mark.asyncio
-async def test_handle_api_request_success():
-    """Test successful API request."""
-    mock_client = AsyncMock(spec=AsyncClient)
-    mock_response = AsyncMock(spec=Response)
-    mock_response.status_code = 200
-    mock_response.text = '{"key": "value"}'
-    mock_client.request.return_value = mock_response
-
-    test_token = 'test_token'
-    telegram_client = TelegramClient(bot_token=test_token)
-
-    api_handler = ApiRequestHandler(telegram_client=telegram_client)
-    test_block = {
-      "id": 1,
-      "type": "api_request",
-      "content": {
-        "url": "https://example.com/api",
+async def test_make_api_request_success(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+    create_test_bot: Dict[str, Any],
+    mock_telegram_api: AsyncMock
+):
+    """
+    Test successful creation of api request.
+    """
+    bot_id = create_test_bot["id"]
+    test_data = {
+        "url": "https://test.com",
         "method": "GET",
-         "response_block_id": 2,
         "headers": {"Content-Type": "application/json"},
-        "params": {"param1": "value1"},
-         "body": {"key": "test_value"}
-      }
+        "params": {"test_param": "test_value"},
+        "body": None,
     }
 
-    variables = {"variable_test": "test_var"}
+    response = await client.post(
+        f"/bots/{bot_id}/api-requests",
+        headers=get_auth_header,
+        json=test_data,
+    )
+    assert response.status_code == 201
+    response_data = response.json()
+    assert response_data["type"] == "api_request"
+    assert response_data["url"] == test_data["url"]
+    assert response_data["method"] == test_data["method"]
+    assert response_data["headers"] == test_data["headers"]
+    assert response_data["params"] == test_data["params"]
+    assert response_data["body"] == test_data["body"]
+
+@pytest.mark.asyncio
+async def test_make_api_request_not_found_bot(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+    mock_telegram_api: AsyncMock
+):
+    """
+     Test creation of api request with not found bot.
+    """
+    bot_id = 999
+    test_data = {
+        "url": "https://test.com",
+        "method": "GET",
+        "headers": {"Content-Type": "application/json"},
+        "params": {"test_param": "test_value"},
+        "body": None,
+    }
+    response = await client.post(
+        f"/bots/{bot_id}/api-requests",
+        headers=get_auth_header,
+        json=test_data,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Bot not found"
+
+
+@pytest.mark.asyncio
+async def test_update_api_request_success(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+    create_test_bot: Dict[str, Any]
+):
+    """
+    Test successful update of api request.
+    """
+    bot_id = create_test_bot["id"]
+    test_data = {
+        "url": "https://test.com",
+        "method": "GET",
+        "headers": {"Content-Type": "application/json"},
+        "params": {"test_param": "test_value"},
+        "body": None,
+    }
+
+    response = await client.post(
+        f"/bots/{bot_id}/api-requests",
+        headers=get_auth_header,
+        json=test_data,
+    )
+    assert response.status_code == 201
+
+    api_request_id = response.json()["id"]
     
-    block_logic = {
-        "connections": [{"source_block_id": 1, "target_block_id": 2}]
+    updated_data = {
+        "url": "https://test2.com",
+        "method": "POST",
+        "headers": {"Content-Type": "application/xml"},
+        "params": {"test_param": "test_value_2"},
+        "body": {"key": "test"},
     }
     
-    from src.core.logic_manager.base import Block
-    from src.db.repositories import BlockRepository
-
-    class MockBlockRepository(BlockRepository):
-        async def get_by_id(self, block_id: int) -> Block:
-                return Block(id=2, type="send_text", content={"content": "test"})
-            
-        async def list_by_ids(self, block_ids: List[int]) -> List[Block]:
-               return [Block(id=2, type="send_text", content={"content": "test"})]
-
-        async def get_bot_by_block_id(self, block_id: int) -> int:
-            return 1
-    
-    mock_block_repository = MockBlockRepository()
-
-
-    api_handler.block_repository = mock_block_repository
-
-    from src.core.logic_manager import LogicManager
-
-    class MockLogicManager(LogicManager):
-            async def _process_block(self, block: Block, chat_id: int, user_message: str, bot_logic: Dict[str, Any], variables: Optional[Dict[str, Any]] = None) -> Optional[int]:
-                return None
-            
-    mock_logic_manager = MockLogicManager()
-    api_handler.logic_manager = mock_logic_manager
-
-    next_block_id = await api_handler.handle_api_request(
-        block=Block(**test_block),
-        chat_id=123,
-        user_message="test_message",
-        bot_logic=block_logic,
-         variables=variables
-       
+    response = await client.put(
+        f"/api-requests/{api_request_id}",
+        headers=get_auth_header,
+        json=updated_data,
     )
 
-    assert next_block_id is None
-    mock_client.request.assert_called_once()
-
-
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["url"] == updated_data["url"]
+    assert response_data["method"] == updated_data["method"]
+    assert response_data["headers"] == updated_data["headers"]
+    assert response_data["params"] == updated_data["params"]
+    assert response_data["body"] == updated_data["body"]
 
 @pytest.mark.asyncio
-async def test_handle_api_request_http_error():
-    """Test API request with HTTP error."""
-    mock_client = AsyncMock(spec=AsyncClient)
-    mock_response = AsyncMock(spec=Response)
-    mock_response.status_code = 404
-    mock_response.text = '{"description": "Not found"}'
-    mock_client.request.side_effect = httpx.HTTPError(
-        "Not Found", request=None, response=mock_response
+async def test_update_api_request_not_found(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock
+):
+    """
+     Test update api request with not found api_request.
+    """
+    api_request_id = 999
+    updated_data = {
+        "url": "https://test2.com",
+        "method": "POST",
+        "headers": {"Content-Type": "application/xml"},
+        "params": {"test_param": "test_value_2"},
+        "body": {"key": "test"},
+    }
+    response = await client.put(
+        f"/api-requests/{api_request_id}",
+        headers=get_auth_header,
+        json=updated_data,
     )
-
-    test_token = 'test_token'
-    telegram_client = TelegramClient(bot_token=test_token)
-
-    api_handler = ApiRequestHandler(telegram_client=telegram_client)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Api request not found"
     
-    test_block = {
-        "id": 1,
-       "type": "api_request",
-        "content": {
-            "url": "https://example.com/api",
-            "method": "GET",
-            "headers": {"Content-Type": "application/json"},
-            "params": {"param1": "value1"},
-         "body": {"key": "test_value"}
-        }
+@pytest.mark.asyncio
+async def test_delete_api_request_success(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+     create_test_bot: Dict[str, Any]
+):
+    """
+    Test successful delete api request.
+    """
+    bot_id = create_test_bot["id"]
+    test_data = {
+        "url": "https://test.com",
+        "method": "GET",
+        "headers": {"Content-Type": "application/json"},
+        "params": {"test_param": "test_value"},
+        "body": None,
     }
-    variables = {"variable_test": "test_var"}
+
+    response = await client.post(
+        f"/bots/{bot_id}/api-requests",
+        headers=get_auth_header,
+        json=test_data,
+    )
+    assert response.status_code == 201
+    api_request_id = response.json()["id"]
     
-    block_logic = {
-        "connections": [{"source_block_id": 1, "target_block_id": 2}]
-    }
+    response = await client.delete(
+        f"/api-requests/{api_request_id}",
+        headers=get_auth_header,
+    )
+    assert response.status_code == 204
     
-    from src.core.logic_manager.base import Block
-    from src.db.repositories import BlockRepository
-
-    class MockBlockRepository(BlockRepository):
-        async def get_by_id(self, block_id: int) -> Block:
-                return Block(id=2, type="send_text", content={"content": "test"})
-    
-    mock_block_repository = MockBlockRepository()
-
-
-    api_handler.block_repository = mock_block_repository
-    
-    from src.core.logic_manager import LogicManager
-    class MockLogicManager(LogicManager):
-            async def _process_block(self, block: Block, chat_id: int, user_message: str, bot_logic: Dict[str, Any], variables: Optional[Dict[str, Any]] = None) -> Optional[int]:
-                return None
-
-    mock_logic_manager = MockLogicManager()
-    api_handler.logic_manager = mock_logic_manager
-
-
-    with pytest.raises(TelegramAPIException) as exc_info:
-      await api_handler.handle_api_request(
-        block=Block(**test_block),
-            chat_id=123,
-            user_message="test_message",
-            bot_logic=block_logic,
-            variables=variables,
-        )
-    assert "Telegram API Error: Not found" in str(exc_info.value)
-    mock_client.request.assert_called_once()
+    response = await client.get(
+      f"/api-requests/{api_request_id}",
+       headers=get_auth_header
+    )
+    assert response.status_code == 404
 
 @pytest.mark.asyncio
-async def test_handle_api_request_unexpected_error():
-    """Test API request with an unexpected error."""
-    mock_client = AsyncMock(spec=AsyncClient)
-    mock_client.request.side_effect = Exception("Unexpected error")
-    
-    test_token = 'test_token'
-    telegram_client = TelegramClient(bot_token=test_token)
-
-    api_handler = ApiRequestHandler(telegram_client=telegram_client)
-    
-    test_block = {
-        "id": 1,
-       "type": "api_request",
-        "content": {
-            "url": "https://example.com/api",
-            "method": "GET",
-            "headers": {"Content-Type": "application/json"},
-            "params": {"param1": "value1"},
-         "body": {"key": "test_value"}
-        }
-    }
-    variables = {"variable_test": "test_var"}
-    
-    block_logic = {
-        "connections": [{"source_block_id": 1, "target_block_id": 2}]
-    }
-    
-    from src.core.logic_manager.base import Block
-    from src.db.repositories import BlockRepository
-
-    class MockBlockRepository(BlockRepository):
-        async def get_by_id(self, block_id: int) -> Block:
-                return Block(id=2, type="send_text", content={"content": "test"})
-    
-    mock_block_repository = MockBlockRepository()
-
-
-    api_handler.block_repository = mock_block_repository
-    
-    from src.core.logic_manager import LogicManager
-    class MockLogicManager(LogicManager):
-            async def _process_block(self, block: Block, chat_id: int, user_message: str, bot_logic: Dict[str, Any], variables: Optional[Dict[str, Any]] = None) -> Optional[int]:
-                return None
-    mock_logic_manager = MockLogicManager()
-    api_handler.logic_manager = mock_logic_manager
-
-
-    with pytest.raises(TelegramAPIException) as exc_info:
-       await api_handler.handle_api_request(
-            block=Block(**test_block),
-            chat_id=123,
-            user_message="test_message",
-            bot_logic=block_logic,
-            variables=variables,
-        )
-    assert "Internal server error" in str(exc_info.value)
-    mock_client.request.assert_called_once()
+async def test_delete_api_request_not_found(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock
+):
+    """
+     Test delete api request with not found api_request.
+    """
+    api_request_id = 999
+    response = await client.delete(
+        f"/api-requests/{api_request_id}",
+        headers=get_auth_header,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Api request not found"
 
 
 @pytest.mark.asyncio
-async def test_handle_api_request_invalid_json():
-    """Test API request with invalid json."""
-    mock_client = AsyncMock(spec=AsyncClient)
-    mock_response = AsyncMock(spec=Response)
-    mock_response.status_code = 200
-    mock_response.text = 'invalid json'
-    mock_client.request.return_value = mock_response
-
-    test_token = 'test_token'
-    telegram_client = TelegramClient(bot_token=test_token)
-
-    api_handler = ApiRequestHandler(telegram_client=telegram_client)
-    
-    test_block = {
-         "id": 1,
-       "type": "api_request",
-        "content": {
-            "url": "https://example.com/api",
+async def test_process_api_request_success(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+    mock_telegram_api: AsyncMock,
+    create_test_bot: Dict[str, Any]
+):
+        """
+        Test processing api request.
+        """
+        bot_id = create_test_bot["id"]
+        test_data = {
+            "url": "https://test.com",
             "method": "GET",
             "headers": {"Content-Type": "application/json"},
-            "params": {"param1": "value1"},
-            "body": {"key": "test_value"}
+            "params": {"test_param": "test_value"},
+            "body": None,
         }
-    }
-    variables = {"variable_test": "test_var"}
-    
-    block_logic = {
-        "connections": [{"source_block_id": 1, "target_block_id": 2}]
-    }
-    
-    from src.core.logic_manager.base import Block
-    from src.db.repositories import BlockRepository
 
-    class MockBlockRepository(BlockRepository):
-        async def get_by_id(self, block_id: int) -> Block:
-                return Block(id=2, type="send_text", content={"content": "test"})
-
-    mock_block_repository = MockBlockRepository()
-    
-    api_handler.block_repository = mock_block_repository
-
-    from src.core.logic_manager import LogicManager
-    class MockLogicManager(LogicManager):
-            async def _process_block(self, block: Block, chat_id: int, user_message: str, bot_logic: Dict[str, Any], variables: Optional[Dict[str, Any]] = None) -> Optional[int]:
-                return None
-
-    mock_logic_manager = MockLogicManager()
-    api_handler.logic_manager = mock_logic_manager
-
-    with pytest.raises(HTTPException) as exc_info:
-        await api_handler.handle_api_request(
-            block=Block(**test_block),
-            chat_id=123,
-            user_message="test_message",
-            bot_logic=block_logic,
-            variables=variables,
+        response = await client.post(
+            f"/bots/{bot_id}/api-requests",
+            headers=get_auth_header,
+            json=test_data,
         )
-    assert "Telegram API Error: Invalid response" in str(exc_info.value.detail)
-    assert exc_info.value.status_code == 200
-    mock_client.request.assert_called_once()
+        assert response.status_code == 201
+        api_request_id = response.json()["id"]
+
+        test_data_process = {
+          "api_request_id": api_request_id,
+          "chat_id": 123,
+           "template_context":  {"test_var": "test_value_from_user"}
+        }
+
+        response = await client.post(
+           f"/api-requests/{api_request_id}/process",
+            headers=get_auth_header,
+            json=test_data_process
+        )
+        assert response.status_code == 200
+        assert response.json()["message"] == "Api request processed successfully"
+
+
+@pytest.mark.asyncio
+async def test_process_api_request_not_found_api_request(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+):
+        """
+        Test processing api request not found api_request.
+        """
+        api_request_id = 999
+        test_data_process = {
+          "api_request_id": api_request_id,
+          "chat_id": 123,
+           "template_context":  {"test_var": "test_value_from_user"}
+        }
+        response = await client.post(
+           f"/api-requests/{api_request_id}/process",
+            headers=get_auth_header,
+            json=test_data_process
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Api request not found"
+
+
+@pytest.mark.asyncio
+async def test_process_api_request_not_valid_method(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+    create_test_bot: Dict[str, Any]
+):
+        """
+        Test processing api request.
+        """
+        bot_id = create_test_bot["id"]
+        test_data = {
+            "url": "https://test.com",
+            "method": "TEST",
+            "headers": {"Content-Type": "application/json"},
+            "params": {"test_param": "test_value"},
+            "body": None,
+        }
+
+        response = await client.post(
+            f"/bots/{bot_id}/api-requests",
+            headers=get_auth_header,
+            json=test_data,
+        )
+        assert response.status_code == 201
+        api_request_id = response.json()["id"]
+
+        test_data_process = {
+          "api_request_id": api_request_id,
+          "chat_id": 123,
+           "template_context":  {"test_var": "test_value_from_user"}
+        }
+
+        response = await client.post(
+           f"/api-requests/{api_request_id}/process",
+            headers=get_auth_header,
+            json=test_data_process
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid method for api request"
+
+@pytest.mark.asyncio
+async def test_process_api_request_fail(
+    client: httpx.AsyncClient,
+    get_auth_header: Dict[str, str],
+    mock_auth_service: AsyncMock,
+    mock_telegram_api: AsyncMock,
+     create_test_bot: Dict[str, Any]
+):
+        """
+        Test processing api request.
+        """
+        bot_id = create_test_bot["id"]
+        test_data = {
+            "url": "https://test.com",
+            "method": "GET",
+            "headers": {"Content-Type": "application/json"},
+            "params": {"test_param": "test_value"},
+            "body": None,
+        }
+
+        response = await client.post(
+            f"/bots/{bot_id}/api-requests",
+            headers=get_auth_header,
+            json=test_data,
+        )
+        assert response.status_code == 201
+        api_request_id = response.json()["id"]
+        mock_telegram_api.send_message.side_effect = Exception('Test exception')
+
+        test_data_process = {
+          "api_request_id": api_request_id,
+          "chat_id": 123,
+           "template_context":  {"test_var": "test_value_from_user"}
+        }
+
+        response = await client.post(
+           f"/api-requests/{api_request_id}/process",
+            headers=get_auth_header,
+            json=test_data_process
+        )
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Internal server error: Test exception"
