@@ -1,9 +1,9 @@
-# services\data_storage_service\src\core\__init__.py
-
 # Импорт базовых настроек, компонентов и зависимостей
 from .utils import (check_migrations_status, format_datetime,
                     generate_random_string, handle_exceptions)
 from .utils.validators import validate_bot_name, validate_metadata_key
+from .database_manager import DatabaseManager
+
 
 # Экспорт компонентов, чтобы они были доступны при импорте пакета core
 __all__ = [
@@ -13,4 +13,5 @@ __all__ = [
     "check_migrations_status",
     "validate_bot_name",
     "validate_metadata_key",
+    "DatabaseManager"
 ]

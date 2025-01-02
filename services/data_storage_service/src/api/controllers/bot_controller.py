@@ -1,18 +1,18 @@
-# services\data_storage_service\src\api\controllers\bot_controller.py
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.middleware.auth import \
-    get_current_user  # Импортируем get_current_user
+from src.api.middleware.auth import get_current_user
 from src.api.schemas.bot_schema import BotCreate, BotResponse, BotUpdate
 from src.api.schemas.response_schema import ErrorResponse, SuccessResponse
+from src.core.database_manager import DatabaseManager
 from src.core.utils import handle_exceptions
 from src.core.utils.validators import validate_bot_name
-from src.db.database import apply_migrations, create_bot_database, get_session
+from src.db.database import  get_session
 from src.db.repositories.bot_repository import BotRepository
+from src.db.repositories.schema_repository import SchemaRepository
 from src.integrations.auth_service import AuthService
 
 router = APIRouter(
@@ -36,7 +36,10 @@ class BotController:
         """
         self.session = session
         self.bot_repository = BotRepository(session)
+        self.schema_repository = SchemaRepository(session)
         self.auth_service = AuthService()
+        self.db_manager = DatabaseManager()
+
 
     @handle_exceptions
     async def create_bot(self, bot_data: BotCreate, user_id: int) -> BotResponse:
@@ -50,7 +53,7 @@ class BotController:
         Returns:
             BotResponse: Ответ с информацией о созданном боте.
         """
-        logger.info(f"Создание нового бота для пользователя {user_id}")
+        logger.info(f"Creating new bot for user {user_id}")
 
         # Проверка прав доступа пользователя для создания бота
         await self.auth_service.validate_user_permissions(user_id, "create_bot")
@@ -63,19 +66,17 @@ class BotController:
 
         # Создание базы данных для бота и запуск миграций
         try:
-            # Генерация DSN для базы данных бота
-            dsn = await create_bot_database(bot.id)
-            # Применение миграций для базы данных
-            await apply_migrations(bot.id)
+            # Создание базы данных и применение миграций
+             dsn = await self.db_manager.create_bot_database(bot_id=bot.id, schema_repository=self.schema_repository)
         except Exception as e:
             logger.error(
-                f"Ошибка при создании базы данных или применении миграций для бота {bot.id}: {e}"
+                f"Error creating database or applying migrations for bot {bot.id}: {e}"
             )
             raise HTTPException(
-                status_code=500, detail="Ошибка при создании базы данных для бота"
+                status_code=500, detail="Error creating database for bot"
             )
 
-        logger.info(f"Бот {bot.id} успешно создан для пользователя {user_id}")
+        logger.info(f"Bot {bot.id} successfully created for user {user_id}")
         return BotResponse.from_orm(bot)
 
     @handle_exceptions
@@ -91,7 +92,7 @@ class BotController:
             BotResponse: Ответ с информацией о боте.
         """
         logger.info(
-            f"Запрос информации о боте с ID {bot_id} для пользователя {user_id}"
+            f"Requesting information about bot with ID {bot_id} for user {user_id}"
         )
 
         # Проверка прав доступа пользователя для чтения информации о боте
@@ -125,7 +126,7 @@ class BotController:
             BotResponse: Ответ с обновленной информацией о боте.
         """
         logger.info(
-            f"Обновление данных о боте с ID {bot_id} для пользователя {user_id}"
+            f"Updating information about bot with ID {bot_id} for user {user_id}"
         )
 
         # Проверка прав доступа пользователя для обновления данных о боте
@@ -147,7 +148,7 @@ class BotController:
         )
 
         logger.info(
-            f"Данные о боте с ID {bot_id} успешно обновлены для пользователя {user_id}"
+            f"Data about bot with ID {bot_id} successfully updated for user {user_id}"
         )
         return BotResponse.from_orm(updated_bot)
 
@@ -163,7 +164,7 @@ class BotController:
         Returns:
             SuccessResponse: Сообщение об успешном удалении.
         """
-        logger.info(f"Удаление бота с ID {bot_id} для пользователя {user_id}")
+        logger.info(f"Deleting bot with ID {bot_id} for user {user_id}")
 
         # Проверка прав доступа пользователя для удаления бота
         await self.auth_service.validate_user_permissions(user_id, "delete_bot")
@@ -178,14 +179,22 @@ class BotController:
                 status_code=403, detail="Not authorized to delete this bot"
             )
 
-        # Удаление бота
-        deleted = await self.bot_repository.delete(bot_id)
-        if not deleted:
-            raise HTTPException(
+        # Удаление бота и базы данных
+        try:
+            await self.db_manager.delete_bot_database(bot_id=bot_id, schema_repository=self.schema_repository)
+            deleted = await self.bot_repository.delete(bot_id)
+            if not deleted:
+               raise HTTPException(
                 status_code=404, detail="Bot not found or already deleted"
             )
 
-        logger.info(f"Бот с ID {bot_id} успешно удален для пользователя {user_id}")
+        except Exception as e:
+              logger.error(f"Error deleting database for bot {bot_id}: {e}")
+              raise HTTPException(
+                  status_code=500, detail="Error deleting database for bot"
+              )
+
+        logger.info(f"Bot with ID {bot_id} successfully deleted for user {user_id}")
         return SuccessResponse(message="Bot deleted successfully")
 
 

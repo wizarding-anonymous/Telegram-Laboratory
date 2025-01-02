@@ -1,21 +1,23 @@
-# services\data_storage_service\src\api\controllers\metadata_controller.py
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.middleware.auth import \
-    get_current_user  # Импортируем get_current_user
-from src.api.schemas.metadata_schema import (MetadataCreate, MetadataResponse,
-                                             MetadataUpdate)
+from src.api.middleware.auth import get_current_user
+from src.api.schemas.metadata_schema import (
+    MetadataCreate,
+    MetadataResponse,
+    MetadataUpdate,
+)
 from src.api.schemas.response_schema import ErrorResponse, SuccessResponse
 from src.core.utils import handle_exceptions
-from src.core.utils.validators import \
-    validate_metadata  # Импортируем validate_metadata
-from src.db.database import apply_migrations, get_session
+from src.core.utils.validators import validate_metadata_key
+from src.db.database import get_session
 from src.db.repositories.metadata_repository import MetadataRepository
+from src.db.repositories.schema_repository import SchemaRepository
 from src.integrations.auth_service import AuthService
+from src.core.database_manager import DatabaseManager
 
 router = APIRouter(
     prefix="/meta/metadata",
@@ -38,7 +40,9 @@ class MetadataController:
         """
         self.session = session
         self.metadata_repository = MetadataRepository(session)
+        self.schema_repository = SchemaRepository(session)
         self.auth_service = AuthService()
+        self.db_manager = DatabaseManager()
 
     @handle_exceptions
     async def create_metadata(
@@ -54,30 +58,23 @@ class MetadataController:
         Returns:
             MetadataResponse: Ответ с информацией о созданных метаданных.
         """
-        logger.info(f"Создание метаданных для бота для пользователя {user_id}")
+        logger.info(f"Creating metadata for bot for user {user_id}")
 
         # Проверка прав доступа пользователя для создания метаданных
         await self.auth_service.validate_user_permissions(user_id, "create_metadata")
 
-        # Валидация данных метаданных
-        validate_metadata(metadata_data.dict())  # Валидация метаданных
+        # Валидация ключа метаданных
+        validate_metadata_key(metadata_data.key)
+
 
         # Создание записи о метаданных
-        metadata = await self.metadata_repository.create(metadata_data.dict(), user_id)
+        metadata = await self.metadata_repository.create(
+            metadata_data.dict(), user_id
+        )
 
-        # Применение миграций для базы данных бота
-        try:
-            await apply_migrations(metadata.bot_id)
-        except Exception as e:
-            logger.error(
-                f"Ошибка при применении миграций для базы данных бота {metadata.bot_id}: {e}"
-            )
-            raise HTTPException(
-                status_code=500,
-                detail="Ошибка при применении миграций для базы данных бота",
-            )
-
-        logger.info(f"Метаданные для бота успешно созданы для пользователя {user_id}")
+        logger.info(
+            f"Metadata for bot successfully created for user {user_id}"
+        )
         return MetadataResponse.from_orm(metadata)
 
     @handle_exceptions
@@ -93,7 +90,7 @@ class MetadataController:
             MetadataResponse: Ответ с информацией о метаданных.
         """
         logger.info(
-            f"Запрос информации о метаданных для бота с ID {bot_id} для пользователя {user_id}"
+            f"Requesting metadata information for bot with ID {bot_id} for user {user_id}"
         )
 
         # Проверка прав доступа пользователя для чтения метаданных
@@ -128,7 +125,7 @@ class MetadataController:
             MetadataResponse: Ответ с обновленной информацией о метаданных.
         """
         logger.info(
-            f"Обновление метаданных для бота с ID {bot_id} для пользователя {user_id}"
+            f"Updating metadata for bot with ID {bot_id} for user {user_id}"
         )
 
         # Проверка прав доступа пользователя для обновления метаданных
@@ -150,7 +147,7 @@ class MetadataController:
         )
 
         logger.info(
-            f"Метаданные для бота с ID {bot_id} успешно обновлены для пользователя {user_id}"
+            f"Metadata for bot with ID {bot_id} successfully updated for user {user_id}"
         )
         return MetadataResponse.from_orm(updated_metadata)
 
@@ -167,7 +164,7 @@ class MetadataController:
             SuccessResponse: Сообщение об успешном удалении метаданных.
         """
         logger.info(
-            f"Удаление метаданных для бота с ID {bot_id} для пользователя {user_id}"
+            f"Deleting metadata for bot with ID {bot_id} for user {user_id}"
         )
 
         # Проверка прав доступа пользователя для удаления метаданных
@@ -191,7 +188,7 @@ class MetadataController:
             )
 
         logger.info(
-            f"Метаданные для бота с ID {bot_id} успешно удалены для пользователя {user_id}"
+            f"Metadata for bot with ID {bot_id} successfully deleted for user {user_id}"
         )
         return SuccessResponse(message="Metadata deleted successfully")
 

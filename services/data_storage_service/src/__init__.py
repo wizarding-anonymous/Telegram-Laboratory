@@ -1,12 +1,13 @@
-# src/__init__.py
-
 # Импорт базовых настроек, компонентов и зависимостей
 from .api.routers.bot_router import router as bot_router
 from .api.routers.health_router import router as health_router
 from .api.routers.metadata_router import router as metadata_router
 from .config import settings
+from .core.database_manager import DatabaseManager
 from .db.database import check_db_connection, close_engine, init_db
 from .integrations.logging_client import LoggingClient
+from .integrations.service_discovery.client import ServiceDiscoveryClient
+
 
 # Инициализация логирования
 logging_client = LoggingClient(service_name=settings.SERVICE_NAME)
@@ -21,4 +22,6 @@ __all__ = [
     "metadata_router",
     "health_router",
     "logging_client",
+    "DatabaseManager",
+    "ServiceDiscoveryClient",
 ]
