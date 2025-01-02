@@ -1,7 +1,0 @@
-# services\auth_service\requirements\test.txt
--r base.txt
-pytest
-pytest-asyncio
-factory-boy
-faker
-coverage

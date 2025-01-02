@@ -1,3 +1,0 @@
-# services\api_gateway\requirements.txt
-# Main requirements file that references environment-specific requirements
--r requirements/base.txt

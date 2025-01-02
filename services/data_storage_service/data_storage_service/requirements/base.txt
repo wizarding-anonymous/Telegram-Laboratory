@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+sqlalchemy[asyncio]
+asyncpg
+pydantic
+redis
+httpx
+loguru
+python-decouple
+alembic
+pydantic-settings
+structlog

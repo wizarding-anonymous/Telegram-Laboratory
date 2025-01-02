@@ -1,0 +1,2 @@
+# Общие зависимости для всех сред
+-r requirements/base.txt

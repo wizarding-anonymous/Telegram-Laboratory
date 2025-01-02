@@ -1,0 +1,13 @@
+version: '3.7'
+services:
+  data_storage_service:
+    build: .
+    container_name: data_storage_service
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    command: >
+      uvicorn src.app:app --host 0.0.0.0 --port 8001 --reload

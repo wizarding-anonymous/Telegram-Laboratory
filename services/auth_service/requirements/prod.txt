@@ -1,4 +1,0 @@
-# services\auth_service\requirements\prod.txt
--r base.txt
-gunicorn
-prometheus-client

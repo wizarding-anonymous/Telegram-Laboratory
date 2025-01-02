@@ -1,9 +1,0 @@
-# user_dashboard/requirements.txt
-
-fastapi
-uvicorn
-SQLAlchemy[asyncio]
-asyncpg
-pydantic
-python-jose
-bcrypt
