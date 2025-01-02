@@ -1,0 +1,6 @@
+# Production dependencies
+-r base.txt
+
+# Production-specific dependencies
+gunicorn
+prometheus-client

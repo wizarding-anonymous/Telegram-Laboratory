@@ -1,0 +1,8 @@
+# Test dependencies
+-r base.txt
+
+pytest
+pytest-asyncio
+factory-boy
+faker
+coverage
