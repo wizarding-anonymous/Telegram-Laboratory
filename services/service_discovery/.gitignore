@@ -1,0 +1,43 @@
+# Игнорировать папку виртуального окружения Python
+venv/
+.env/
+
+# Игнорировать папку миграций Django
+migrations/
+
+# Игнорировать кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Игнорировать файлы настроек и секретов
+*.secret
+*.key
+*.pem
+
+# Игнорировать логи и временные файлы
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Игнорировать файлы IDE
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Игнорировать статические файлы и базы данных
+*.sqlite3
+*.db
+*.sql
+*.dump
+
+# Игнорировать установленные зависимости
+node_modules/
+bower_components/
+dist/
+build/
