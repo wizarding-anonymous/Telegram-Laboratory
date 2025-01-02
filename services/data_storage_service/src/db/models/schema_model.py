@@ -1,6 +1,4 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func
-from sqlalchemy.orm import relationship
-
 from .base import Base
 
 
@@ -17,7 +15,6 @@ class Schema(Base):
     dsn = Column(String(1000), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    bot = relationship("Bot", back_populates="schema", lazy="selectin")
 
     def __repr__(self):
         return f"<Schema(id={self.id}, bot_id={self.bot_id}, dsn='{self.dsn}')>"

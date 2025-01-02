@@ -14,25 +14,25 @@ class DatabaseException(Exception):
         return f"Database Error: {self.message}"
 
 
-class ServiceDiscoveryException(Exception):
+class ValidationException(Exception):
     """
-    Custom exception for errors related to the Service Discovery service.
+    Custom exception for data validation errors.
     """
     def __init__(self, message: str):
         self.message = message
         super().__init__(self.message)
 
     def __str__(self):
-        return f"Service Discovery Error: {self.message}"
+        return f"Validation Error: {self.message}"
 
 
-class ValidationException(Exception):
+class IntegrationException(Exception):
     """
-    Custom exception for data validation errors.
+    Custom exception for errors related to integrations with other services.
     """
     def __init__(self, message: str):
-         self.message = message
-         super().__init__(self.message)
+        self.message = message
+        super().__init__(self.message)
 
     def __str__(self):
-         return f"Validation Error: {self.message}"
+        return f"Integration Error: {self.message}"

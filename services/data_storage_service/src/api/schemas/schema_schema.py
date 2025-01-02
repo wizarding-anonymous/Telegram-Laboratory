@@ -1,6 +1,13 @@
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel, Field
+
+
+class SchemaCreate(BaseModel):
+    """
+    Schema for creating a new database schema (DSN).
+    """
+    bot_id: int = Field(..., description="ID of the associated bot")
 
 
 class SchemaResponse(BaseModel):
@@ -12,5 +19,9 @@ class SchemaResponse(BaseModel):
     dsn: str = Field(..., description="Database connection string (DSN)")
     created_at: datetime = Field(..., description="Date and time of creation")
 
-    class Config:
-        orm_mode = True
+
+class SchemaListResponse(BaseModel):
+    """
+    Schema for a list of schema responses.
+    """
+    items: List[SchemaResponse]

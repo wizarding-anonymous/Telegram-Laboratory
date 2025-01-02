@@ -1,28 +1,36 @@
 import os
 import sys
-from loguru import logger
+import structlog
+
+def configure_logger(service_name: str = "DataStorageService"):
+    """
+    Configures the structlog logger.
+    """
+    structlog.configure(
+        processors=[
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
+
+    formatter = structlog.stdlib.ProcessorFormatter(
+            processor=structlog.dev.ConsoleRenderer(),
+            foreign_preprocessors=[
+               structlog.stdlib.ProcessorFormatter.remove_processors_attribute,
+            ]
+    )
+
+    handler = structlog.stdlib.ProcessorFormatter.wrap_for_formatter(formatter)
+
+    logger = structlog.get_logger(service_name)
+
+    if service_name == "DataStorageService":
+      logger.info(f"LoggingClient initialized for service: {service_name}")
+    return logger
 
 
-class LoggingClient:
-    def __init__(self, service_name: str = "DataStorageService"):
-        self.service_name = service_name
-        # Удаляем все существующие обработчики
-        logger.remove()
-        self._setup_logger()
-        logger.info(f"LoggingClient initialized for service: {self.service_name}")
-
-    def _setup_logger(self):
-        log_format = (
-            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-            "<level>{message}</level>"
-        )
-
-        # Добавляем только один обработчик для файла
-        logger.add(
-            sink=sys.stdout,
-            format=log_format,
-            level="DEBUG",
-            enqueue=True
-        )
+logger = configure_logger()

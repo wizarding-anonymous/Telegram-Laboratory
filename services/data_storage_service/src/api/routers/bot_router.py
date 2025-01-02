@@ -8,7 +8,7 @@ from src.api.schemas import (
     BotUpdate,
     SuccessResponse
 )
-from src.api.middleware.auth import auth_required, admin_required
+from src.api.middleware.auth import auth_required
 
 router = APIRouter(prefix="/bots", tags=["Bots"])
 
@@ -25,7 +25,7 @@ async def create_bot(
     """
     Creates a new bot.
     """
-    return await controller.create_bot(bot_data)
+    return await controller.create_bot(bot_data=bot_data)
 
 
 @router.get(

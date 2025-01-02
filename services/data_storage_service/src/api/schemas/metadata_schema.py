@@ -1,9 +1,9 @@
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class MetadataCreate(BaseModel):
+class MetaCreate(BaseModel):
     """
     Schema for creating new metadata.
     """
@@ -12,7 +12,7 @@ class MetadataCreate(BaseModel):
     value: str = Field(..., description="Value of the metadata")
 
 
-class MetadataUpdate(BaseModel):
+class MetaUpdate(BaseModel):
     """
     Schema for updating existing metadata.
     """
@@ -20,7 +20,7 @@ class MetadataUpdate(BaseModel):
     value: Optional[str] = Field(None, description="Updated value of the metadata")
 
 
-class MetadataResponse(BaseModel):
+class MetaResponse(BaseModel):
     """
     Schema for metadata response.
     """
@@ -30,5 +30,9 @@ class MetadataResponse(BaseModel):
     value: str = Field(..., description="Value of the metadata")
     created_at: datetime = Field(..., description="Date and time of creation")
 
-    class Config:
-        orm_mode = True
+
+class MetaListResponse(BaseModel):
+    """
+    Schema for a list of metadata responses.
+    """
+    items: List[MetaResponse]

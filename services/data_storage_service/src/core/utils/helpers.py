@@ -1,8 +1,6 @@
-# services/data_storage_service/src/core/utils/helpers.py
-
 from functools import wraps
 from loguru import logger
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from typing import Any, Callable, TypeVar, ParamSpec
 from datetime import datetime
 import json
@@ -31,7 +29,8 @@ def handle_exceptions(func: Callable[P, R]) -> Callable[P, R]:
         except Exception as exc:
             logger.exception("An unexpected error occurred")
             raise HTTPException(
-                status_code=500, detail=f"Internal server error: {str(exc)}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Internal server error: {str(exc)}"
             ) from exc
 
     return wrapper
@@ -50,12 +49,3 @@ def format_datetime(date_time: datetime) -> str:
     Formats a datetime object into a string.
     """
     return date_time.strftime("%Y-%m-%d %H:%M:%S")
-
-
-async def check_migrations_status() -> bool:
-    """
-    Placeholder for checking migrations status.
-    Will be implemented in future versions.
-    """
-    # Тут будет логика проверки миграций
-    return True

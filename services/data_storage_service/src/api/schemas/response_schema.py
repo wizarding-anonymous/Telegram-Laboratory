@@ -14,14 +14,7 @@ class ErrorResponse(BaseModel):
     Schema for error response.
     """
     message: str = Field(..., description="Error message")
-
-
-class ValidationErrorResponse(BaseModel):
-    """
-    Schema for validation error response.
-    """
-    message: str = Field(..., description="Error message")
-    errors: List[Dict[str, Any]] = Field(..., description="List of validation errors")
+    details: Optional[Any] = Field(None, description="Detailed error information")
 
 
 class HealthCheckResponse(BaseModel):

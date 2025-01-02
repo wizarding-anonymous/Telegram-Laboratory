@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, status
 
 from src.api.controllers import MetadataController
 from src.api.schemas import (
-    MetadataCreate,
-    MetadataResponse,
-    MetadataUpdate,
+    MetaCreate,
+    MetaResponse,
+    MetaUpdate,
+    MetaListResponse,
     SuccessResponse
 )
 from src.api.middleware.auth import auth_required
@@ -15,13 +16,13 @@ router = APIRouter(prefix="/metadata", tags=["Metadata"])
 
 @router.post(
     "/",
-    response_model=MetadataResponse,
+    response_model=MetaResponse,
     status_code=status.HTTP_201_CREATED,
-     dependencies=[Depends(auth_required())]
+    dependencies=[Depends(auth_required())]
 )
 async def create_metadata(
-    metadata_data: MetadataCreate, controller: MetadataController = Depends()
-) -> MetadataResponse:
+    metadata_data: MetaCreate, controller: MetadataController = Depends()
+) -> MetaResponse:
     """
     Creates new metadata.
     """
@@ -30,26 +31,39 @@ async def create_metadata(
 
 @router.get(
     "/{metadata_id}",
-    response_model=MetadataResponse,
+    response_model=MetaResponse,
     dependencies=[Depends(auth_required())]
 )
 async def get_metadata(
     metadata_id: int, controller: MetadataController = Depends()
-) -> MetadataResponse:
+) -> MetaResponse:
     """
     Retrieves metadata by its ID.
     """
     return await controller.get_metadata(metadata_id=metadata_id)
 
+@router.get(
+    "/bot/{bot_id}",
+    response_model=MetaListResponse,
+    dependencies=[Depends(auth_required())]
+)
+async def get_all_metadata_by_bot_id(
+    bot_id: int, controller: MetadataController = Depends()
+) -> MetaListResponse:
+    """
+    Retrieves all metadata for a specific bot ID.
+    """
+    return await controller.get_all_metadata_by_bot_id(bot_id=bot_id)
+
 
 @router.put(
     "/{metadata_id}",
-    response_model=MetadataResponse,
+    response_model=MetaResponse,
     dependencies=[Depends(auth_required())]
 )
 async def update_metadata(
-    metadata_id: int, metadata_data: MetadataUpdate, controller: MetadataController = Depends()
-) -> MetadataResponse:
+    metadata_id: int, metadata_data: MetaUpdate, controller: MetadataController = Depends()
+) -> MetaResponse:
     """
     Updates existing metadata.
     """
